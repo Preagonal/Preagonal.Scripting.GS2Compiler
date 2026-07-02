@@ -598,6 +598,7 @@ internal static class GS2Compiler
 		private readonly Stack<List<int>> _conditionFailPatches = new();
 		private readonly Stack<List<int>> _conditionSuccessPatches = new();
 		private readonly Dictionary<string, string> _negativeFloatText = new(StringComparer.Ordinal);
+		private readonly Stack<HashSet<string>> _tempAliases = new();
 		private int _newObjectCount;
 		private bool _dynamicMethodName;
 
@@ -617,12 +618,14 @@ internal static class GS2Compiler
 			functionName += node.Name;
 			if (node.ObjectName == "universe") functionName = (node.Public ? "public." : "") + node.Name + "," + functionName;
 			var addedFunction = _bytecode.AddFunction(functionName, _bytecode.OpIndex, 0);
+			_tempAliases.Push(CollectTempAliases(node));
 			_bytecode.Emit(Op.TypeArray);
 			for (var i = node.Args.Count - 1; i >= 0; --i) Emit(node.Args[i]);
 			_bytecode.Emit(Op.FuncParamsEnd);
 			_bytecode.Emit(Op.Jmp);
 			if (node.Body.Exists(ContainsCall)) _bytecode.Emit(Op.CmdCall);
 			foreach (var statement in node.Body) EmitStatement(statement);
+			_tempAliases.Pop();
 			var lastStatement = LastMeaningfulStatement(node.Body);
 			if (node.Name != "getPreviewSpriteCount" && (lastStatement == null || !DefinitelyReturns(lastStatement)))
 			{
@@ -1108,6 +1111,10 @@ internal static class GS2Compiler
 						if (NeedsStringConversion(member.Name)) _bytecode.Emit(Op.ConvToString);
 					}
 					_bytecode.Emit(Op.MemberAccess);
+					break;
+				case StringCastExpr { Expression: IdentifierExpr id } when _tempAliases.TryPeek(out var tempAliases) && tempAliases.Contains(id.Name):
+					Emit(new MemberExpr(new IdentifierExpr("temp"), id.Name));
+					_bytecode.Emit(Op.ConvToString);
 					break;
 				case StringCastExpr cast:
 					Emit(cast.Expression);
@@ -1719,6 +1726,149 @@ internal static class GS2Compiler
 			NewStmt stmt => stmt.Args.Exists(ContainsCall) || stmt.Body.Exists(ContainsCall),
 			_ => false
 		};
+
+		private static HashSet<string> CollectTempAliases(FunctionNode function)
+		{
+			HashSet<string> aliases = new(StringComparer.Ordinal);
+			foreach (var statement in function.Body) CollectTempAliases(statement, aliases);
+			foreach (var arg in function.Args)
+				if (arg is IdentifierExpr id) aliases.Remove(id.Name);
+			return aliases;
+		}
+
+		private static void CollectTempAliases(Stmt statement, HashSet<string> aliases)
+		{
+			switch (statement)
+			{
+				case ExprStmt expr:
+					CollectTempAliases(expr.Expression, aliases);
+					break;
+				case InlineStmt inline:
+					CollectTempAliases(inline.Statement, aliases);
+					break;
+				case BlockStmt block:
+					foreach (var item in block.Body) CollectTempAliases(item, aliases);
+					break;
+				case IfStmt stmt:
+					CollectTempAliases(stmt.Condition, aliases);
+					foreach (var item in stmt.ThenBody) CollectTempAliases(item, aliases);
+					foreach (var item in stmt.ElseBody) CollectTempAliases(item, aliases);
+					break;
+				case ForStmt stmt:
+					if (stmt.Init != null) CollectTempAliases(stmt.Init, aliases);
+					CollectTempAliases(stmt.Condition, aliases);
+					if (stmt.Post != null) CollectTempAliases(stmt.Post, aliases);
+					foreach (var item in stmt.Body) CollectTempAliases(item, aliases);
+					break;
+				case ForEachStmt stmt:
+					CollectTempAliases(stmt.Source, aliases);
+					foreach (var item in stmt.Body) CollectTempAliases(item, aliases);
+					break;
+				case WhileStmt stmt:
+					CollectTempAliases(stmt.Condition, aliases);
+					foreach (var item in stmt.Body) CollectTempAliases(item, aliases);
+					break;
+				case WithStmt stmt:
+					CollectTempAliases(stmt.Target, aliases);
+					foreach (var item in stmt.Body) CollectTempAliases(item, aliases);
+					break;
+				case SwitchStmt stmt:
+					CollectTempAliases(stmt.Expression, aliases);
+					foreach (var currentCase in stmt.Cases)
+					{
+						foreach (var label in currentCase.Labels)
+							if (label != null) CollectTempAliases(label, aliases);
+						foreach (var item in currentCase.Body) CollectTempAliases(item, aliases);
+					}
+					break;
+				case NewStmt stmt:
+					foreach (var arg in stmt.Args) CollectTempAliases(arg, aliases);
+					foreach (var item in stmt.Body) CollectTempAliases(item, aliases);
+					break;
+				case ReturnStmt stmt:
+					CollectTempAliases(stmt.Expression, aliases);
+					break;
+			}
+		}
+
+		private static void CollectTempAliases(Expr expr, HashSet<string> aliases)
+		{
+			switch (expr)
+			{
+				case BinaryExpr { Op: "=" or "+=" or "-=" or "*=" or "/=" or "%=" or "^=" or "@=" or "<<=" or ">>=", Left: MemberExpr { Object: IdentifierExpr { Name: "temp" }, Name: var name } }:
+					aliases.Add(name);
+					break;
+				case BinaryExpr binary:
+					CollectTempAliases(binary.Left, aliases);
+					CollectTempAliases(binary.Right, aliases);
+					break;
+				case TernaryExpr ternary:
+					CollectTempAliases(ternary.Condition, aliases);
+					CollectTempAliases(ternary.WhenTrue, aliases);
+					CollectTempAliases(ternary.WhenFalse, aliases);
+					break;
+				case InExpr inExpr:
+					CollectTempAliases(inExpr.Expression, aliases);
+					CollectTempAliases(inExpr.Lower, aliases);
+					if (inExpr.Upper != null) CollectTempAliases(inExpr.Upper, aliases);
+					break;
+				case UnaryExpr unary:
+					CollectTempAliases(unary.Expression, aliases);
+					break;
+				case StringCastExpr cast:
+					CollectTempAliases(cast.Expression, aliases);
+					break;
+				case CastExpr cast:
+					CollectTempAliases(cast.Expression, aliases);
+					break;
+				case MemberExpr member:
+					CollectTempAliases(member.Object, aliases);
+					break;
+				case DynamicMemberExpr member:
+					CollectTempAliases(member.Object, aliases);
+					CollectTempAliases(member.Name, aliases);
+					break;
+				case DynamicVarExpr dynamicVar:
+					CollectTempAliases(dynamicVar.Name, aliases);
+					break;
+				case ArrayIndexExpr index:
+					CollectTempAliases(index.Target, aliases);
+					CollectTempAliases(index.Index, aliases);
+					break;
+				case MultiArrayIndexExpr index:
+					CollectTempAliases(index.Target, aliases);
+					foreach (var item in index.Indices) CollectTempAliases(item, aliases);
+					break;
+				case CallExpr call:
+					foreach (var arg in call.Args) CollectTempAliases(arg, aliases);
+					break;
+				case ChainedCallExpr call:
+					CollectTempAliases(call.Call, aliases);
+					foreach (var arg in call.Args) CollectTempAliases(arg, aliases);
+					break;
+				case MethodCallExpr call:
+					CollectTempAliases(call.Object, aliases);
+					foreach (var arg in call.Args) CollectTempAliases(arg, aliases);
+					break;
+				case DynamicMethodCallExpr call:
+					CollectTempAliases(call.Object, aliases);
+					CollectTempAliases(call.Name, aliases);
+					foreach (var arg in call.Args) CollectTempAliases(arg, aliases);
+					break;
+				case NewObjectExpr obj:
+					foreach (var arg in obj.Args) CollectTempAliases(arg, aliases);
+					break;
+				case NewArrayExpr array:
+					foreach (var item in array.Dimensions) CollectTempAliases(item, aliases);
+					break;
+				case LambdaExpr lambda:
+					foreach (var item in lambda.Body) CollectTempAliases(item, aliases);
+					break;
+				case ArrayLiteralExpr array:
+					foreach (var item in array.Values) CollectTempAliases(item, aliases);
+					break;
+			}
+		}
 
 		private static bool ContainsCall(Expr expr) => expr switch
 		{

@@ -145,6 +145,26 @@ public class InterfaceTests
 	}
 
 	[Fact]
+	public void Given_temp_alias_with_string_cast_array_comparison_When_compiling_Then_bare_identifier_reads_temp_member()
+	{
+		const string scriptText =
+			"""
+						//#CLIENTSIDE
+						function onCreated() {
+						  temp.var = {true,true};
+
+						  return @var == @{1,1};
+						}
+			""";
+
+		var result = Interface.CompileCode(scriptText, withHeader: false);
+		var code = ReadBytecodeSegment(result.ByteCode);
+
+		Assert.True(result.Success);
+		Assert.True(ContainsPattern([189, 22, -1, -1, 35, 34, 23, 20, -1, 1, 20, -1, 1, 37, 34, 35, 70], code));
+	}
+
+	[Fact]
 	public void Given_script_with_power_assign_When_compiling_Then_success_is_true_and_bytecode_is_not_empty()
 	{
 		const string scriptText =
@@ -791,6 +811,22 @@ public class InterfaceTests
 			for (var j = 0; j < expected.Length; j++)
 			{
 				if (actual[i + j] == expected[j]) continue;
+				matched = false;
+				break;
+			}
+			if (matched) return true;
+		}
+		return false;
+	}
+
+	private static bool ContainsPattern(int[] expected, byte[] actual)
+	{
+		for (var i = 0; i <= actual.Length - expected.Length; i++)
+		{
+			var matched = true;
+			for (var j = 0; j < expected.Length; j++)
+			{
+				if (expected[j] < 0 || actual[i + j] == expected[j]) continue;
 				matched = false;
 				break;
 			}
