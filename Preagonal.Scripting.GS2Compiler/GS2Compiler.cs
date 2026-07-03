@@ -1112,7 +1112,7 @@ internal static class GS2Compiler
 					}
 					_bytecode.Emit(Op.MemberAccess);
 					break;
-				case StringCastExpr { Expression: IdentifierExpr id } when _tempAliases.TryPeek(out var tempAliases) && tempAliases.Contains(id.Name):
+				case StringCastExpr { Expression: IdentifierExpr id } when IsTempAlias(id.Name):
 					Emit(new MemberExpr(new IdentifierExpr("temp"), id.Name));
 					_bytecode.Emit(Op.ConvToString);
 					break;
@@ -1679,6 +1679,8 @@ internal static class GS2Compiler
 			_ => true
 		};
 
+		private bool IsTempAlias(string name) => _tempAliases.Count > 0 && _tempAliases.Peek().Contains(name);
+
 		private static bool IsNumberExpr(Expr expr) => ExpressionTypeOf(expr) == ExprType.Number;
 
 		private static bool UsesInlineForCondition(Expr expr) => expr is BinaryExpr { Op: "&&", Left: BinaryExpr { Op: ">", Left: MemberExpr { Object: IdentifierExpr { Name: "temp" } }, Right: UnaryExpr { Op: "-", Expression: NumberExpr { Text: "1" } } }, Right: UnaryExpr { Op: "!", Expression: MemberExpr { Object: IdentifierExpr { Name: "temp" } } } }
@@ -1731,8 +1733,6 @@ internal static class GS2Compiler
 		{
 			HashSet<string> aliases = new(StringComparer.Ordinal);
 			foreach (var statement in function.Body) CollectTempAliases(statement, aliases);
-			foreach (var arg in function.Args)
-				if (arg is IdentifierExpr id) aliases.Remove(id.Name);
 			return aliases;
 		}
 
