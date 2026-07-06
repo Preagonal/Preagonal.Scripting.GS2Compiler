@@ -17,22 +17,15 @@ jobs:
     steps:
     - uses: actions/checkout@v7
       with:
-        path: Preagonal.Scripting.GS2Compiler
-    - uses: actions/checkout@v7
-      with:
-        repository: Preagonal/Preagonal.Scripting.GSAst
-        path: Preagonal.Scripting.GSAst
+        submodules: true
         token: ${{ secrets.PREAGONAL_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
     - name: Setup .NET
       uses: actions/setup-dotnet@v5
       with:
         dotnet-version: 10.0.x
     - name: Restore dependencies
-      working-directory: Preagonal.Scripting.GS2Compiler
       run: dotnet restore
     - name: Build
-      working-directory: Preagonal.Scripting.GS2Compiler
       run: dotnet build --no-restore
     - name: Test
-      working-directory: Preagonal.Scripting.GS2Compiler
       run: dotnet test --no-build --verbosity normal
