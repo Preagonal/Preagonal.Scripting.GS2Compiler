@@ -223,14 +223,51 @@ node('master') {
 				returnStdout: true
 			).trim();
 
-			env.JSON_RESPONSE = sh(
-				script: "curl -L -X POST -H \"Accept: application/vnd.github+json\" -H \"Authorization: Bearer ${env.GITHUB_TOKEN}\" -H \"X-GitHub-Api-Version: 2022-11-28\" https://api.github.com/repos/preagonal/Preagonal.Scripting.GS2Compiler/git/tags -d '{\"tag\":\"${tagName}\",\"message\":\"${env.COMMIT_MSG}\",\"object\":\"${env.GIT_COMMIT}\",\"type\":\"tree\",\"tagger\":{\"name\":\"preagonal-pipeline[bot]\",\"email\":\"119898225+preagonal-pipeline[bot]@users.noreply.github.com\",\"date\":\"${iso8601Date}\"}}'",
+			writeJSON file: 'github-tag-request.json', json: [
+				tag: tagName,
+				message: env.COMMIT_MSG,
+				object: env.GIT_COMMIT,
+				type: 'commit',
+				tagger: [
+					name: 'preagonal-pipeline[bot]',
+					email: '119898225+preagonal-pipeline[bot]@users.noreply.github.com',
+					date: iso8601Date
+				]
+			];
+
+			def tagResponse = sh(
+				script: '''
+					curl -sS -L -X POST \
+						-H "Accept: application/vnd.github+json" \
+						-H "Authorization: Bearer $GITHUB_TOKEN" \
+						-H "X-GitHub-Api-Version: 2022-11-28" \
+						-H "Content-Type: application/json" \
+						https://api.github.com/repos/preagonal/Preagonal.Scripting.gs2compiler/git/tags \
+						--data @github-tag-request.json
+				''',
 				returnStdout: true
-			);
-			def response = readJSON(text: env.JSON_RESPONSE);
+			).trim();
+			def response = readJSON(text: tagResponse);
+
+			if (!response.sha) {
+				error("GitHub tag creation did not return a tag SHA: ${tagResponse}");
+			}
+
+			writeJSON file: 'github-ref-request.json', json: [
+				ref: "refs/tags/${tagName}",
+				sha: response.sha
+			];
 
 			sh(
-				script: "curl -L -X POST -H \"Accept: application/vnd.github+json\" -H \"Authorization: Bearer ${env.GITHUB_TOKEN}\" -H \"X-GitHub-Api-Version: 2022-11-28\" https://api.github.com/repos/preagonal/Preagonal.Scripting.GS2Compiler/git/refs -d '{\"ref\": \"refs/tags/${tagName}\", \"sha\": \"${response.sha}\"}'",
+				script: '''
+					curl -sS -L -X POST \
+						-H "Accept: application/vnd.github+json" \
+						-H "Authorization: Bearer $GITHUB_TOKEN" \
+						-H "X-GitHub-Api-Version: 2022-11-28" \
+						-H "Content-Type: application/json" \
+						https://api.github.com/repos/preagonal/Preagonal.Scripting.gs2compiler/git/refs \
+						--data @github-ref-request.json
+				''',
 				returnStdout: true
 			);
 		}
