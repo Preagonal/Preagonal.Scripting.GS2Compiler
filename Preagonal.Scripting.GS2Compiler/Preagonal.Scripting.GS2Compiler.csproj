@@ -23,7 +23,6 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Antlr4BuildTasks" Version="12.14.0" PrivateAssets="all" />
 		<PackageReference Include="Antlr4.Runtime.Standard" Version="4.13.1" />
 	</ItemGroup>
 
@@ -32,10 +31,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<Antlr4 Include="Grammar\GS1Lexer.g4" Listener="false" Visitor="false" />
-		<Antlr4 Include="Grammar\GS1Parser.g4" Listener="false" Visitor="true" />
-		<Antlr4 Include="Grammar\GS2Lexer.g4" Listener="false" Visitor="false" />
-		<Antlr4 Include="Grammar\GS2Parser.g4" Listener="false" Visitor="true" />
+		<ProjectReference Include="..\..\Preagonal.Scripting.GS2Ast\Preagonal.Scripting.GS2Ast\Preagonal.Scripting.GS2Ast.csproj" />
 	</ItemGroup>
 
 </Project>
