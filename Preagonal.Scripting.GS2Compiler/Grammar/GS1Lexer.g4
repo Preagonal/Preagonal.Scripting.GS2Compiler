@@ -313,7 +313,7 @@ FUNC_GROUP_5 : 'lindexof'                     { pushCommand("(SV)"); }   -> type
 FUNC_GROUP_6 : 'sarraylen'                    { pushCommand("(V)"); }    -> type(FUNCTION);
 FUNC_GROUP_7 : ('playersays' | 'playersays2') { pushCommand("<ES)"); }   -> type(FUNCTION);
 
-MC_NOINDEX		: '#' ([angcmWw1235678NDLFfpbES] | 'C' [01234567] | 'P1' DIGITS? | 'P2' DIGITS? | 'P3' '0'? | 'P' [456789]) { _input.LA(1) != '(' }? -> type(MESSAGECODE);
+MC_NOINDEX		: '#' ([angcmWw1235678NDLFfpbES] | 'C' [01234567] | 'P1' DIGITS? | 'P2' DIGITS? | 'P3' '0'? | 'P' [456789]) { InputStream.LA(1) != '(' }? -> type(MESSAGECODE);
 MC_SIMPLE		: '#' ([angcmWw1235678NDptKkG]   | 'C' [01234567] | 'P1' DIGITS? | 'P2' DIGITS? | 'P3' '0'? | 'P' [456789]) { pushCommand("(P)"); }   -> type(MESSAGECODE);
 MC_COMPUTED_S	: '#s'          { pushCommand("(V)"); }   -> type(MESSAGECODE);
 MC_COMPUTED_V	: '#v'          { pushCommand("(E)"); }   -> type(MESSAGECODE);

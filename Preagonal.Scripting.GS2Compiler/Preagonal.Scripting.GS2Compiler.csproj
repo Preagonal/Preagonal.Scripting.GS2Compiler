@@ -32,6 +32,8 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<Antlr4 Include="Grammar\GS1Lexer.g4" Listener="false" Visitor="false" />
+		<Antlr4 Include="Grammar\GS1Parser.g4" Listener="false" Visitor="true" />
 		<Antlr4 Include="Grammar\GS2Lexer.g4" Listener="false" Visitor="false" />
 		<Antlr4 Include="Grammar\GS2Parser.g4" Listener="false" Visitor="true" />
 	</ItemGroup>

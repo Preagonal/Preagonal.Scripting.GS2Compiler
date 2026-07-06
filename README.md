@@ -13,4 +13,4 @@ if (response.Success)
 }
 ```
 
-The public API is centered on `Interface.CompileCode(string? code, string? type = "weapon", string? name = "npc", bool withHeader = true)` and returns `CompilerResponse`.
+The public API is centered on `Interface.CompileCode(string? code, string? type = "weapon", string? name = "npc", bool withHeader = true, ScriptGrammar grammar = ScriptGrammar.GS2)` and returns `CompilerResponse`.

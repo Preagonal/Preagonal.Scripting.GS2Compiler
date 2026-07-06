@@ -53,6 +53,58 @@ public class InterfaceTests
 	}
 
 	[Fact]
+	public void Given_script_and_explicit_gs2_grammar_When_compiling_Then_bytecode_matches_default()
+	{
+		const string scriptText =
+			"""
+						function onCreated() {
+						  this.value = 1;
+						}
+			""";
+
+		var defaultResult = Interface.CompileCode(scriptText, withHeader: false);
+		var explicitResult = Interface.CompileCode(scriptText, withHeader: false, grammar: ScriptGrammar.GS2);
+
+		Assert.True(defaultResult.Success);
+		Assert.True(explicitResult.Success);
+		Assert.Equal(defaultResult.ByteCode, explicitResult.ByteCode);
+	}
+
+	[Fact]
+	public void Given_common_script_When_compiling_with_gs1_or_gs2_grammar_Then_bytecode_matches()
+	{
+		const string scriptText =
+			"""
+						function onCreated() {
+						  this.value = 1;
+						  this.value += 2;
+						}
+			""";
+
+		var gs2Result = Interface.CompileCode(scriptText, withHeader: false, grammar: ScriptGrammar.GS2);
+		var gs1Result = Interface.CompileCode(scriptText, withHeader: false, grammar: ScriptGrammar.GS1);
+
+		Assert.True(gs2Result.Success, gs2Result.ErrMsg);
+		Assert.True(gs1Result.Success, gs1Result.ErrMsg);
+		Assert.Equal(gs2Result.ByteCode, gs1Result.ByteCode);
+	}
+
+	[Fact]
+	public void Given_gs1_command_script_When_compiling_with_gs1_grammar_Then_success_is_true_and_bytecode_is_not_empty()
+	{
+		const string scriptText =
+			"""
+						set playerhearts;
+						unset playerhearts;
+			""";
+
+		var result = Interface.CompileCode(scriptText, withHeader: false, grammar: ScriptGrammar.GS1);
+
+		Assert.True(result.Success, result.ErrMsg);
+		Assert.NotEmpty(result.ByteCode);
+	}
+
+	[Fact]
 	public void Given_script_with_continue_When_compiling_Then_success_is_true_and_bytecode_is_not_empty()
 	{
 		const string scriptText =

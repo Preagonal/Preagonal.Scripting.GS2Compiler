@@ -1,17 +1,26 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
+using System.Linq;
 using System.Text;
+using Antlr4.Runtime;
+using Antlr4.Runtime.Tree;
 
 namespace Preagonal.Scripting.GS2Compiler;
 
 internal static class GS2Compiler
 {
-	public static CompilerResponse Compile(string code, string type, string name, bool withHeader)
+	public static CompilerResponse Compile(string code, string type, string name, bool withHeader, ScriptGrammar grammar)
 	{
-		var parser = new Parser(code);
-		var program = parser.Parse();
-		if (parser.ErrorMessage != null) return new() { Success = false, ErrMsg = parser.ErrorMessage, ByteCode = [] };
+		var parseResult = grammar switch
+		{
+			ScriptGrammar.GS2 => AntlrGs2Parser.Parse(code),
+			ScriptGrammar.GS1 => AntlrGs1Parser.Parse(code),
+			_ => AntlrGs2Parser.Parse(code)
+		};
+		if (parseResult.ErrorMessage != null || parseResult.Program == null) return new() { Success = false, ErrMsg = parseResult.ErrorMessage ?? "malformed input\n", ByteCode = [] };
+		var program = parseResult.Program;
 		var bytecode = new BytecodeWriter();
 		var emitter = new Emitter(bytecode, program.Constants, program.Enums);
 		foreach (var item in program.Items)
@@ -23,568 +32,824 @@ internal static class GS2Compiler
 		return new() { Success = true, ErrMsg = null, ByteCode = withHeader ? Header.Wrap(result, type, name) : result };
 	}
 
-	private sealed class Parser
+	private sealed record ParseResult(ProgramNode? Program, string? ErrorMessage);
+
+	private sealed class ParseFailure : Exception
 	{
-		private readonly Lexer _lexer;
-		private Token _current;
-		private Token _previous = new(TokenType.End, "", 1, 1);
-		private readonly Dictionary<string, Expr> _constants = new(StringComparer.Ordinal);
-		private readonly Dictionary<string, Dictionary<string, int>> _enums = new(StringComparer.Ordinal);
-		private int _lambdaId = 100;
-		public string? ErrorMessage { get; private set; }
+		public int Line { get; }
 
-		public Parser(string code)
+		public ParseFailure(int line) => Line = line;
+	}
+
+	private sealed class ThrowingErrorListener : IAntlrErrorListener<int>, IAntlrErrorListener<IToken>
+	{
+		public void SyntaxError(TextWriter output, IRecognizer recognizer, int offendingSymbol, int line, int charPositionInLine, string msg, RecognitionException e) => throw new ParseFailure(line);
+		public void SyntaxError(TextWriter output, IRecognizer recognizer, IToken offendingSymbol, int line, int charPositionInLine, string msg, RecognitionException e) => throw new ParseFailure(line);
+	}
+
+	private static string ErrorMessage(string code, int line) => $"malformed input at line {line}: {LineText(code, line)}\n";
+
+	private static string LineText(string code, int line)
+	{
+		var currentLine = 1;
+		var start = 0;
+		while (currentLine < line && start < code.Length)
 		{
-			_lexer = new(code);
-			_current = _lexer.Next();
+			var next = code.IndexOf('\n', start);
+			if (next < 0) return "";
+			start = next + 1;
+			currentLine++;
 		}
+		var end = code.IndexOf('\n', start);
+		if (end < 0) end = code.Length;
+		if (end > start && code[end - 1] == '\r') end--;
+		return code[start..end];
+	}
 
-		public ProgramNode Parse()
+	private static string NormalizeOperator(string op) => op switch
+	{
+		":=" => "=",
+		"<>" => "!=",
+		_ => op
+	};
+
+	private static class AntlrGs2Parser
+	{
+		public static ParseResult Parse(string code)
 		{
-			List<FunctionNode> functions = [];
-			List<ProgramItem> items = [];
-			while (_current.Type != TokenType.End)
+			try
 			{
-				if (Match(TokenType.Const)) ParseConst();
-				else if (Match(TokenType.Enum)) ParseEnum();
-				else if (Match(TokenType.Public)) { Expect(TokenType.Function); items.Add(new FunctionItem(ParseFunction(true, null))); }
-				else if (Match(TokenType.Function)) items.Add(new FunctionItem(ParseFunction(false, null)));
-				else items.Add(new StatementItem(ParseStatement()));
+				var input = CharStreams.fromString(code);
+				var lexer = new GS2Lexer(input);
+				var tokens = new CommonTokenStream(lexer);
+				var parser = new GS2Parser(tokens);
+				var listener = new ThrowingErrorListener();
+				lexer.RemoveErrorListeners();
+				parser.RemoveErrorListeners();
+				lexer.AddErrorListener(listener);
+				parser.AddErrorListener(listener);
+				var script = parser.script();
+				return parser.NumberOfSyntaxErrors == 0
+					? new(new Builder().Build(script), null)
+					: new(null, ErrorMessage(code, 1));
 			}
-			return new(_constants, _enums, items);
-		}
-
-		private void ParseConst()
-		{
-			var name = Expect(TokenType.Identifier).Text;
-			Expect(TokenType.Assign);
-			_constants[name] = ParseExpression();
-			Expect(TokenType.Semicolon);
-		}
-
-		private void ParseEnum()
-		{
-			var enumName = Match(TokenType.Identifier) ? _previous.Text : "";
-			Expect(TokenType.LeftBrace);
-			Dictionary<string, int> values = new(StringComparer.Ordinal);
-			var index = 0;
-			while (_current.Type != TokenType.RightBrace && _current.Type != TokenType.End)
+			catch (ParseFailure ex)
 			{
-				var name = Expect(TokenType.Identifier).Text;
-				if (Match(TokenType.Assign)) index = ParseSignedInt();
-				values[name] = index++;
-				Match(TokenType.Comma);
+				return new(null, ErrorMessage(code, ex.Line));
 			}
-			Expect(TokenType.RightBrace);
-			Match(TokenType.Semicolon);
-			if (enumName.Length > 0) _enums[enumName] = values;
 		}
 
-		private FunctionNode ParseFunction(bool isPublic, string? objectName)
+		private sealed class Builder
 		{
-			var name = ParseQualifiedIdentifierName();
-			if (Match(TokenType.Dot))
-			{
-				objectName = name;
-				name = ParseQualifiedIdentifierName();
-			}
-			Expect(TokenType.LeftParen);
-			List<Expr> args = [];
-			if (_current.Type != TokenType.RightParen)
-			{
-				do args.Add(ParseExpression()); while (Match(TokenType.Comma));
-			}
-			Expect(TokenType.RightParen);
-			var body = _current.Type switch
-			{
-				TokenType.LeftBrace => ParseBlock(),
-				TokenType.Semicolon => EmptyBody(),
-				TokenType.Function or TokenType.End => [],
-				_ => [ParseStatement()]
-			};
-			return new(name, objectName, isPublic, args, body);
-		}
+			private readonly Dictionary<string, Expr> _constants = new(StringComparer.Ordinal);
+			private readonly Dictionary<string, Dictionary<string, int>> _enums = new(StringComparer.Ordinal);
+			private int _lambdaId = 100;
 
-		private List<Stmt> EmptyBody()
-		{
-			Match(TokenType.Semicolon);
-			return [];
-		}
-
-		private List<Stmt> ParseBody() => _current.Type == TokenType.LeftBrace ? ParseBlock() : [new InlineStmt(ParseStatement())];
-
-		private List<Stmt> ParseBlock()
-		{
-			List<Stmt> statements = [];
-			Expect(TokenType.LeftBrace);
-			while (_current.Type != TokenType.RightBrace && _current.Type != TokenType.End)
-				statements.Add(ParseStatement());
-			Expect(TokenType.RightBrace);
-			return statements;
-		}
-
-		private Stmt ParseStatement()
-		{
-			if (Match(TokenType.Semicolon)) return new BlockStmt([]);
-			if (_current.Type == TokenType.LeftBrace) return new BlockStmt(ParseBlock());
-			if (Match(TokenType.New)) return ParseNewStatement();
-			if (Match(TokenType.Return))
+			public ProgramNode Build(GS2Parser.ScriptContext context)
 			{
-				var expr = _current.Type == TokenType.Semicolon ? new NumberExpr("0") : ParseExpression();
-				Expect(TokenType.Semicolon);
-				return new ReturnStmt(expr);
-			}
-			if (Match(TokenType.Break))
-			{
-				Expect(TokenType.Semicolon);
-				return new BreakStmt();
-			}
-			if (Match(TokenType.Continue))
-			{
-				Expect(TokenType.Semicolon);
-				return new ContinueStmt();
-			}
-			if (Match(TokenType.If))
-			{
-				Expect(TokenType.LeftParen);
-				var condition = ParseExpression();
-				Expect(TokenType.RightParen);
-				var thenBody = ParseBody();
-				var hasElse = false;
-				var elseBody = Match(TokenType.Else) ? HasElse(ParseBody(), out hasElse) : Match(TokenType.ElseIf) ? HasElse([ParseElseIfStatement()], out hasElse) : [];
-				return new IfStmt(condition, thenBody, elseBody, hasElse);
-			}
-			if (Match(TokenType.For)) return ParseForStatement();
-			if (Match(TokenType.While))
-			{
-				Expect(TokenType.LeftParen);
-				var condition = ParseExpression();
-				Expect(TokenType.RightParen);
-				return new WhileStmt(condition, ParseBody());
-			}
-			if (Match(TokenType.With))
-			{
-				Expect(TokenType.LeftParen);
-				var target = ParseExpression();
-				Expect(TokenType.RightParen);
-				return new WithStmt(target, ParseBody());
-			}
-			if (Match(TokenType.Switch)) return ParseSwitchStatement();
-			var before = _current;
-			var exprStatement = new ExprStmt(ParseExpression());
-			Expect(TokenType.Semicolon);
-			if (before == _current) Advance();
-			return exprStatement;
-		}
-
-		private Stmt ParseNewStatement()
-		{
-			var typeName = ParseQualifiedIdentifierName();
-			Expect(TokenType.LeftParen);
-			List<Expr> args = [];
-			if (_current.Type != TokenType.RightParen)
-				do args.Add(ParseExpression()); while (Match(TokenType.Comma));
-			Expect(TokenType.RightParen);
-			return new NewStmt(typeName, args, _current.Type == TokenType.LeftBrace ? ParseBlock() : []);
-		}
-
-		private Stmt ParseElseIfStatement()
-		{
-			Expect(TokenType.LeftParen);
-			var condition = ParseExpression();
-			Expect(TokenType.RightParen);
-			var thenBody = ParseBody();
-			var hasElse = false;
-			var elseBody = Match(TokenType.Else) ? HasElse(ParseBody(), out hasElse) : Match(TokenType.ElseIf) ? HasElse([ParseElseIfStatement()], out hasElse) : [];
-			return new IfStmt(condition, thenBody, elseBody, hasElse);
-		}
-
-		private static List<Stmt> HasElse(List<Stmt> body, out bool hasElse)
-		{
-			hasElse = true;
-			return body;
-		}
-
-		private Stmt ParseForStatement()
-		{
-			Expect(TokenType.LeftParen);
-			var first = _current.Type == TokenType.Semicolon ? null : ParseExpression();
-			if (Match(TokenType.Colon))
-			{
-				if (first == null) Error("malformed input");
-				var source = ParseExpression();
-				Expect(TokenType.RightParen);
-				return new ForEachStmt(first ?? new NumberExpr("0"), source, ParseBody());
-			}
-			Expect(TokenType.Semicolon);
-			var condition = _current.Type == TokenType.Semicolon ? new BoolExpr(true) : ParseExpression();
-			Expect(TokenType.Semicolon);
-			var post = _current.Type == TokenType.RightParen ? null : ParseExpression();
-			Expect(TokenType.RightParen);
-			return new ForStmt(first, condition, post, ParseBody());
-		}
-
-		private Stmt ParseSwitchStatement()
-		{
-			Expect(TokenType.LeftParen);
-			var expr = ParseExpression();
-			Expect(TokenType.RightParen);
-			Expect(TokenType.LeftBrace);
-			List<SwitchCase> cases = [];
-			while (_current.Type != TokenType.RightBrace && _current.Type != TokenType.End)
-			{
-				List<Expr?> labels = [];
-				while (_current.Type is TokenType.Case or TokenType.Default)
+				List<ProgramItem> items = [];
+				foreach (var declaration in context.declaration())
 				{
-					if (Match(TokenType.Case)) labels.Add(ParseExpression());
-					else { Match(TokenType.Default); labels.Add(null); }
-					Expect(TokenType.Colon);
+					if (declaration.constDeclaration() is { } constDeclaration) BuildConst(constDeclaration);
+					else if (declaration.enumDeclaration() is { } enumDeclaration) BuildEnum(enumDeclaration);
+					else if (declaration.functionDeclaration() is { } functionDeclaration) items.Add(new FunctionItem(BuildFunction(functionDeclaration)));
+					else if (declaration.statement() is { } statement) items.Add(new StatementItem(BuildStatement(statement)));
 				}
+				return new(_constants, _enums, items);
+			}
+
+			private void BuildConst(GS2Parser.ConstDeclarationContext context) => _constants[context.IDENTIFIER().GetText()] = BuildExpression(context.expression());
+
+			private void BuildEnum(GS2Parser.EnumDeclarationContext context)
+			{
+				var enumName = context.IDENTIFIER().GetText();
+				Dictionary<string, int> values = new(StringComparer.Ordinal);
+				var index = 0;
+				foreach (var member in context.enumMember())
+				{
+					if (member.expression() != null) index = ParseEnumValue(member.expression());
+					values[member.IDENTIFIER().GetText()] = index++;
+				}
+				_enums[enumName] = values;
+			}
+
+			private int ParseEnumValue(GS2Parser.ExpressionContext context) => BuildExpression(context) switch
+			{
+				NumberExpr number => int.Parse(number.Text, CultureInfo.InvariantCulture),
+				UnaryExpr { Op: "-", Expression: NumberExpr number } => -int.Parse(number.Text, CultureInfo.InvariantCulture),
+				_ => 0
+			};
+
+			private FunctionNode BuildFunction(GS2Parser.FunctionDeclarationContext context)
+			{
+				var (name, objectName) = BuildFunctionName(context.functionName().GetText());
+				return new(name, objectName, context.PUBLIC() != null, BuildArguments(context.parameterList()?.argumentList()), BuildFunctionBody(context.statement()));
+			}
+
+			private static (string Name, string? ObjectName) BuildFunctionName(string text)
+			{
+				var parts = text.Split('.', StringSplitOptions.RemoveEmptyEntries);
+				return parts.Length <= 1 ? (text, null) : (parts[^1], string.Join('.', parts.Take(parts.Length - 1)));
+			}
+
+			private List<Stmt> BuildStatementBody(GS2Parser.StatementContext? context)
+			{
+				if (context == null) return [];
+				if (context.block() is { } block) return BuildBlock(block);
+				if (IsEmptyStatement(context)) return [];
+				return [new InlineStmt(BuildStatement(context))];
+			}
+
+			private List<Stmt> BuildFunctionBody(GS2Parser.StatementContext? context)
+			{
+				if (context == null) return [];
+				if (context.block() is { } block) return BuildBlock(block);
+				if (IsEmptyStatement(context)) return [];
+				return [BuildStatement(context)];
+			}
+
+			private List<Stmt> BuildBlock(GS2Parser.BlockContext context)
+			{
 				List<Stmt> statements = [];
-				while (_current.Type is not TokenType.Case and not TokenType.Default and not TokenType.RightBrace and not TokenType.End)
-					statements.Add(ParseStatement());
-				if (labels.Count > 1) labels.Reverse();
-				cases.Add(new(labels, statements));
-			}
-			Expect(TokenType.RightBrace);
-			return new SwitchStmt(expr, cases);
-		}
-
-		private Expr ParseExpression() => ParseAssignment();
-
-		private Expr ParseAssignment()
-		{
-			var left = ParseConditional();
-			var op = _current.Type switch
-			{
-				TokenType.Assign => "=",
-				TokenType.AddAssign => "+=",
-				TokenType.SubAssign => "-=",
-				TokenType.MulAssign => "*=",
-				TokenType.DivAssign => "/=",
-				TokenType.PowAssign => "^=",
-				TokenType.ModAssign => "%=",
-				TokenType.CatAssign => "@=",
-				TokenType.ShiftLeftAssign => "<<=",
-				TokenType.ShiftRightAssign => ">>=",
-				_ => ""
-			};
-			if (op.Length == 0) return left;
-			Advance();
-			return new BinaryExpr(left, op, ParseAssignment());
-		}
-
-		private Expr ParseConditional()
-		{
-			var condition = ParseLogicalOr();
-			if (!Match(TokenType.Question)) return condition;
-			var whenTrue = ParseExpression();
-			Expect(TokenType.Colon);
-			return new TernaryExpr(condition, whenTrue, ParseExpression());
-		}
-
-		private Expr ParseLogicalOr()
-		{
-			var expr = ParseLogicalAnd();
-			while (Match(TokenType.Or)) expr = new BinaryExpr(expr, "||", ParseLogicalAnd());
-			return expr;
-		}
-
-		private Expr ParseLogicalAnd()
-		{
-			var expr = ParseBitwise();
-			while (Match(TokenType.And)) expr = new BinaryExpr(expr, "&&", ParseBitwise());
-			return expr;
-		}
-
-		private Expr ParseBitwise()
-		{
-			var expr = ParseEquality();
-			while (_current.Type is TokenType.BitAnd or TokenType.BitOr or TokenType.BitXor or TokenType.ShiftLeft or TokenType.ShiftRight)
-			{
-				var op = _current.Text;
-				Advance();
-				expr = new BinaryExpr(expr, op, ParseEquality());
-			}
-			return expr;
-		}
-
-		private Expr ParseEquality()
-		{
-			var expr = ParseComparison();
-			while (_current.Type is TokenType.Equal or TokenType.NotEqual or TokenType.In)
-			{
-				if (Match(TokenType.In))
+				foreach (var statement in context.statement())
 				{
-					if (Match(TokenType.BitOr))
-					{
-						var lower = ParseComparison();
-						Expect(TokenType.Comma);
-						var upper = ParseComparison();
-						Expect(TokenType.BitOr);
-						expr = new InExpr(expr, lower, upper);
-					}
-					else if (Match(TokenType.Less))
-					{
-						var lower = ParseComparison();
-						Expect(TokenType.Comma);
-						var upper = ParseComparison();
-						Expect(TokenType.Greater);
-						expr = new InExpr(expr, lower, upper);
-					}
-					else expr = new InExpr(expr, ParseComparison(), null);
-					continue;
+					var built = BuildStatement(statement);
+					if (built is BlockStmt { Body.Count: 0 }) continue;
+					statements.Add(built);
 				}
-				var op = _current.Text;
-				Advance();
-				expr = new BinaryExpr(expr, op, ParseComparison());
+				return statements;
 			}
-			return expr;
-		}
 
-		private Expr ParseComparison()
-		{
-			var expr = ParseConcat();
-			while (_current.Type is TokenType.Less or TokenType.LessEqual or TokenType.Greater or TokenType.GreaterEqual)
+			private Stmt BuildStatement(GS2Parser.StatementContext context)
 			{
-				var op = _current.Text;
-				Advance();
-				expr = new BinaryExpr(expr, op, ParseConcat());
+				if (IsEmptyStatement(context)) return new BlockStmt([]);
+				if (context.block() is { } block) return new BlockStmt(BuildBlock(block));
+				if (context.ifStatement() is { } ifStatement) return BuildIf(ifStatement);
+				if (context.forStatement() is { } forStatement) return BuildFor(forStatement);
+				if (context.whileStatement() is { } whileStatement) return new WhileStmt(BuildExpression(whileStatement.expression()), BuildStatementBody(whileStatement.statement()));
+				if (context.switchStatement() is { } switchStatement) return BuildSwitch(switchStatement);
+				if (context.withStatement() is { } withStatement) return new WithStmt(BuildExpression(withStatement.expression()), BuildStatementBody(withStatement.statement()));
+				if (context.newStatement() is { } newStatement) return new NewStmt(newStatement.IDENTIFIER().GetText(), BuildArguments(newStatement.argumentList()), newStatement.block() == null ? [] : BuildBlock(newStatement.block()));
+				if (context.returnStatement() is { } returnStatement) return new ReturnStmt(returnStatement.expression() == null ? new NumberExpr("0") : BuildExpression(returnStatement.expression()));
+				if (context.breakStatement() != null) return new BreakStmt();
+				if (context.continueStatement() != null) return new ContinueStmt();
+				if (context.expressionStatement() is { } expressionStatement) return new ExprStmt(BuildExpression(expressionStatement.expression()));
+				throw Failure(context);
 			}
-			return expr;
-		}
 
-		private Expr ParseConcat()
-		{
-			var expr = ParseTerm();
-			while (_current.Type is TokenType.At)
+			private static bool IsEmptyStatement(GS2Parser.StatementContext context) => context.SEMI() != null && context.ChildCount == 1;
+
+			private Stmt BuildIf(GS2Parser.IfStatementContext context)
 			{
-				var op = _current.Text;
-				Advance();
-				expr = new BinaryExpr(expr, op, ParseTerm());
+				var hasElse = context.ELSE() != null || context.ELSEIF() != null;
+				List<Stmt> elseBody = [];
+				if (context.ELSE() != null) elseBody = BuildStatementBody(context.statement(1));
+				else if (context.ifTail() != null) elseBody = [BuildIfTail(context.ifTail())];
+				return new IfStmt(BuildExpression(context.expression()), BuildStatementBody(context.statement(0)), elseBody, hasElse);
 			}
-			return expr;
-		}
 
-		private Expr ParseTerm()
-		{
-			var expr = ParseFactor();
-			while (_current.Type is TokenType.Plus or TokenType.Minus)
+			private Stmt BuildIfTail(GS2Parser.IfTailContext context)
 			{
-				var op = _current.Text;
-				Advance();
-				expr = new BinaryExpr(expr, op, ParseFactor());
+				var hasElse = context.ELSE() != null || context.ELSEIF() != null;
+				List<Stmt> elseBody = [];
+				if (context.ELSE() != null) elseBody = BuildStatementBody(context.statement(1));
+				else if (context.ifTail() != null) elseBody = [BuildIfTail(context.ifTail())];
+				return new IfStmt(BuildExpression(context.expression()), BuildStatementBody(context.statement(0)), elseBody, hasElse);
 			}
-			return expr;
-		}
 
-		private Expr ParseFactor()
-		{
-			var expr = ParseUnary();
-			while (_current.Type is TokenType.Star or TokenType.Slash or TokenType.Percent or TokenType.Caret)
+			private Stmt BuildFor(GS2Parser.ForStatementContext context)
 			{
-				var op = _current.Text;
-				Advance();
-				expr = new BinaryExpr(expr, op, ParseUnary());
+				var expressions = context.expression();
+				if (context.COLON() != null) return new ForEachStmt(BuildExpression(expressions[0]), BuildExpression(expressions[1]), BuildStatementBody(context.statement()));
+				Expr? init = null;
+				Expr? post = null;
+				var expressionIndex = 0;
+				if (expressions.Length > expressionIndex && expressions[expressionIndex].Start.TokenIndex < context.SEMI(0).Symbol.TokenIndex) init = BuildExpression(expressions[expressionIndex++]);
+				var condition = expressions.Length > expressionIndex && expressions[expressionIndex].Start.TokenIndex < context.SEMI(1).Symbol.TokenIndex ? BuildExpression(expressions[expressionIndex++]) : new BoolExpr(true);
+				if (expressions.Length > expressionIndex) post = BuildExpression(expressions[expressionIndex]);
+				return new ForStmt(init, condition, post, BuildStatementBody(context.statement()));
 			}
-			return expr;
-		}
 
-		private Expr ParsePostfix()
-		{
-			Expr expr = ParsePrimary();
-			while (true)
+			private Stmt BuildSwitch(GS2Parser.SwitchStatementContext context)
 			{
-				if (Match(TokenType.Dot))
+				List<SwitchCase> cases = [];
+				List<Expr?> labels = [];
+				foreach (var switchCase in context.switchCase())
 				{
-					if (Match(TokenType.LeftParen))
+					labels.Add(switchCase.DEFAULT() != null ? null : BuildExpression(switchCase.expression()));
+					var statements = switchCase.statement().Select(BuildStatement).ToList();
+					if (statements.Count == 0) continue;
+					if (labels.Count > 1) labels.Reverse();
+					cases.Add(new([.. labels], statements));
+					labels.Clear();
+				}
+				if (labels.Count > 0)
+				{
+					if (labels.Count > 1) labels.Reverse();
+					cases.Add(new([.. labels], []));
+				}
+				return new SwitchStmt(BuildExpression(context.expression()), cases);
+			}
+
+			private Expr BuildExpression(GS2Parser.ExpressionContext context) => BuildAssignment(context.assignmentExpression());
+
+			private Expr BuildAssignment(GS2Parser.AssignmentExpressionContext context)
+			{
+				var left = BuildConditional(context.conditionalExpression());
+				return context.assignmentOperator() == null ? left : new BinaryExpr(left, NormalizeOperator(context.assignmentOperator().GetText()), BuildAssignment(context.assignmentExpression()));
+			}
+
+			private Expr BuildConditional(GS2Parser.ConditionalExpressionContext context)
+			{
+				var condition = BuildLogicalOr(context.logicalOrExpression());
+				return context.QUESTION() == null ? condition : new TernaryExpr(condition, BuildExpression(context.expression(0)), BuildExpression(context.expression(1)));
+			}
+
+			private Expr BuildLogicalOr(GS2Parser.LogicalOrExpressionContext context) => BuildBinaryChain(context, context.logicalAndExpression(), BuildLogicalAnd);
+			private Expr BuildLogicalAnd(GS2Parser.LogicalAndExpressionContext context) => BuildBinaryChain(context, context.bitwiseExpression(), BuildBitwise);
+			private Expr BuildBitwise(GS2Parser.BitwiseExpressionContext context) => BuildBinaryChain(context, context.equalityExpression(), BuildEquality);
+
+			private Expr BuildEquality(GS2Parser.EqualityExpressionContext context)
+			{
+				var comparisons = context.comparisonExpression();
+				var ranges = context.rangeExpression();
+				var comparisonIndex = 1;
+				var rangeIndex = 0;
+				var expression = BuildComparison(comparisons[0]);
+				for (var i = 1; i < context.ChildCount; ++i)
+				{
+					if (context.GetChild(i) is not ITerminalNode terminal) continue;
+					if (terminal.Symbol.Type == GS2Parser.IN) expression = BuildInRange(expression, ranges[rangeIndex++]);
+					else expression = new BinaryExpr(expression, NormalizeOperator(terminal.GetText()), BuildComparison(comparisons[comparisonIndex++]));
+				}
+				return expression;
+			}
+
+			private Expr BuildInRange(Expr left, GS2Parser.RangeExpressionContext context)
+			{
+				if (context.comparisonExpression() != null) return new InExpr(left, BuildComparison(context.comparisonExpression()), null);
+				var expressions = context.expression();
+				return new InExpr(left, BuildExpression(expressions[0]), expressions.Length > 1 ? BuildExpression(expressions[1]) : null);
+			}
+
+			private Expr BuildComparison(GS2Parser.ComparisonExpressionContext context) => BuildBinaryChain(context, context.concatExpression(), BuildConcat);
+			private Expr BuildConcat(GS2Parser.ConcatExpressionContext context) => BuildBinaryChain(context, context.additiveExpression(), BuildAdditive);
+			private Expr BuildAdditive(GS2Parser.AdditiveExpressionContext context) => BuildBinaryChain(context, context.multiplicativeExpression(), BuildMultiplicative);
+			private Expr BuildMultiplicative(GS2Parser.MultiplicativeExpressionContext context) => BuildBinaryChain(context, context.prefixExpression(), BuildPrefix);
+
+			private Expr BuildPrefix(GS2Parser.PrefixExpressionContext context)
+			{
+				if (context.postfixExpression() != null) return BuildPostfix(context.postfixExpression());
+				var op = context.op.Text;
+				var expression = BuildPrefix(context.prefixExpression());
+				return op switch
+				{
+					"@" => new StringCastExpr(expression),
+					_ => new UnaryExpr(op, expression)
+				};
+			}
+
+			private Expr BuildPostfix(GS2Parser.PostfixExpressionContext context)
+			{
+				var expression = BuildPrimary(context.primaryExpression());
+				foreach (var part in context.postfixPart())
+				{
+					if (part.DOT() != null && part.IDENTIFIER() != null)
 					{
-						var name = Match(TokenType.At) ? new StringCastExpr(ParseExpression()) : ParseExpression();
-						Expect(TokenType.RightParen);
-						expr = new DynamicMemberExpr(expr, name);
+						expression = new MemberExpr(expression, part.IDENTIFIER().GetText());
 						continue;
 					}
-					expr = new MemberExpr(expr, Expect(TokenType.Identifier).Text);
-					continue;
-				}
-				if (Match(TokenType.LeftBracket))
-				{
-					List<Expr> indices = [ParseExpression()];
-					while (Match(TokenType.Comma)) indices.Add(ParseExpression());
-					Expect(TokenType.RightBracket);
-					expr = indices.Count == 1 ? new ArrayIndexExpr(expr, indices[0]) : new MultiArrayIndexExpr(expr, indices);
-					continue;
-				}
-				if (Match(TokenType.LeftParen))
-				{
-					List<Expr> args = [];
-					if (_current.Type != TokenType.RightParen)
+					if (part.DOT() != null && part.expression() != null)
 					{
-						do args.Add(ParseExpression()); while (Match(TokenType.Comma));
+						expression = new DynamicMemberExpr(expression, BuildDynamicMemberName(part.expression()));
+						continue;
 					}
-					Expect(TokenType.RightParen);
-					expr = expr switch
+					if (part.LBRACK() != null)
+					{
+						expression = ApplyIndices(expression, BuildArguments(part.argumentList()), true);
+						continue;
+					}
+					if (part.op != null)
+					{
+						expression = new UnaryExpr(part.op.Text, expression, true);
+						continue;
+					}
+					var args = BuildArguments(part.argumentList());
+					expression = expression switch
 					{
 						IdentifierExpr id => new CallExpr(id.Name, args),
 						MemberExpr member => new MethodCallExpr(member.Object, member.Name, args),
-						CallExpr call => new ChainedCallExpr(call, args),
 						DynamicMemberExpr member => new DynamicMethodCallExpr(member.Object, member.Name, args),
-						_ => expr
+						CallExpr call => new ChainedCallExpr(call, args),
+						_ => expression
 					};
-					continue;
 				}
-				break;
+				return expression;
 			}
-			if (Match(TokenType.Increment)) expr = new UnaryExpr("++", expr, true);
-			else if (Match(TokenType.Decrement)) expr = new UnaryExpr("--", expr, true);
-			return expr;
+
+			private Expr BuildDynamicMemberName(GS2Parser.ExpressionContext context)
+			{
+				var expression = BuildExpression(context);
+				return context.Start.Type == GS2Parser.CONCAT ? new StringCastExpr(RemoveLeadingStringCast(expression)) : expression;
+			}
+
+			private static Expr RemoveLeadingStringCast(Expr expression) => expression switch
+			{
+				StringCastExpr cast => cast.Expression,
+				BinaryExpr { Left: StringCastExpr cast, Op: var op, Right: var right } => new BinaryExpr(cast.Expression, op, right),
+				_ => expression
+			};
+
+			private Expr BuildPrimary(GS2Parser.PrimaryExpressionContext context)
+			{
+				if (context.NUMBER() != null) return new NumberExpr(context.NUMBER().GetText());
+				if (context.STRING() != null)
+				{
+					var text = context.STRING().GetText();
+					if (text == "\\") throw Failure(context);
+					return new StringExpr(text);
+				}
+				if (context.TRUE() != null) return new BoolExpr(true);
+				if (context.FALSE() != null) return new BoolExpr(false);
+				if (context.NULL() != null) return new NullExpr();
+				if (context.castExpression() != null) return BuildCast(context.castExpression());
+				if (context.IDENTIFIER() != null) return BuildIdentifier(context.IDENTIFIER().GetText());
+				if (context.arrayLiteral() != null) return new ArrayLiteralExpr(BuildArguments(context.arrayLiteral().argumentList()));
+				if (context.lambdaExpression() != null) return BuildLambda(context.lambdaExpression());
+				if (context.newExpression() != null) return BuildNewExpression(context.newExpression());
+				if (context.expression() != null) return BuildExpression(context.expression());
+				throw Failure(context);
+			}
+
+			private static Expr BuildIdentifier(string text)
+			{
+				var parts = text.Split("::", StringSplitOptions.None);
+				return parts.Length == 2 && !parts[0].StartsWith('$') ? new EnumExpr(parts[0], parts[1]) : new IdentifierExpr(text);
+			}
+
+			private Expr BuildCast(GS2Parser.CastExpressionContext context)
+			{
+				var type = context.INT_CAST() != null ? "int" : context.FLOAT_CAST() != null ? "float" : "_";
+				return new CastExpr(type, BuildExpression(context.expression()));
+			}
+
+			private Expr BuildLambda(GS2Parser.LambdaExpressionContext context) =>
+				new LambdaExpr($"function_{_lambdaId++}_1", BuildArguments(context.argumentList()), BuildStatementBody(context.statement()));
+
+			private Expr BuildNewExpression(GS2Parser.NewExpressionContext context) =>
+				context.IDENTIFIER() != null ? new NewObjectExpr(context.IDENTIFIER().GetText(), BuildArguments(context.argumentList())) : new NewArrayExpr(context.arrayRank().Select(rank => BuildExpression(rank.expression())).ToList());
+
+			private static Expr ApplyIndices(Expr expression, List<Expr> indices, bool zeroWhenEmpty) => indices.Count switch
+			{
+				0 => zeroWhenEmpty ? new ArrayIndexExpr(expression, new NumberExpr("0")) : expression,
+				1 => new ArrayIndexExpr(expression, indices[0]),
+				_ => new MultiArrayIndexExpr(expression, indices)
+			};
+
+			private List<Expr> BuildArguments(GS2Parser.ArgumentListContext? context) => context == null ? [] : context.expression().Select(BuildExpression).ToList();
+
+			private Expr BuildBinaryChain<TContext>(ParserRuleContext context, TContext[] operands, Func<TContext, Expr> buildOperand) where TContext : ParserRuleContext
+			{
+				var expression = buildOperand(operands[0]);
+				var operators = OperatorTexts(context);
+				for (var i = 1; i < operands.Length; ++i)
+					expression = new BinaryExpr(expression, NormalizeOperator(operators[i - 1]), buildOperand(operands[i]));
+				return expression;
+			}
+
+			private static List<string> OperatorTexts(ParserRuleContext context)
+			{
+				List<string> operators = [];
+				for (var i = 0; i < context.ChildCount; ++i)
+					if (context.GetChild(i) is ITerminalNode terminal && IsBinaryOperator(terminal.Symbol.Type))
+						operators.Add(terminal.GetText());
+				return operators;
+			}
+
+			private static bool IsBinaryOperator(int type) => type is
+				GS2Parser.OR or GS2Parser.AND or GS2Parser.BAND or GS2Parser.BOR or GS2Parser.BXOR or GS2Parser.SHL or GS2Parser.SHR or
+				GS2Parser.EQ or GS2Parser.NEQ or GS2Parser.NEQ_ALT or GS2Parser.LT or GS2Parser.LTE or GS2Parser.LTE_ALT or GS2Parser.GT or GS2Parser.GTE or GS2Parser.GTE_ALT or
+				GS2Parser.CONCAT or GS2Parser.PLUS or GS2Parser.MINUS or GS2Parser.MUL or GS2Parser.DIV or GS2Parser.MOD or GS2Parser.POW;
+
+			private static ParseFailure Failure(ParserRuleContext context) => new(context.Start.Line);
+		}
+	}
+
+	private static class AntlrGs1Parser
+	{
+		public static ParseResult Parse(string code)
+		{
+			try
+			{
+				var input = CharStreams.fromString(code);
+				var lexer = new GS1Lexer(input);
+				var tokens = new CommonTokenStream(lexer);
+				var parser = new GS1Parser(tokens);
+				var listener = new ThrowingErrorListener();
+				lexer.RemoveErrorListeners();
+				parser.RemoveErrorListeners();
+				lexer.AddErrorListener(listener);
+				parser.AddErrorListener(listener);
+				var program = parser.program();
+				return parser.NumberOfSyntaxErrors == 0
+					? new(new Builder(code).Build(program), null)
+					: new(null, ErrorMessage(code, 1));
+			}
+			catch (ParseFailure ex)
+			{
+				return new(null, ErrorMessage(code, ex.Line));
+			}
 		}
 
-		private Expr ParseUnary()
+		private sealed class Builder
 		{
-			if (Match(TokenType.Increment)) return new UnaryExpr("++", ParseUnary());
-			if (Match(TokenType.Decrement)) return new UnaryExpr("--", ParseUnary());
-			if (Match(TokenType.At)) return new StringCastExpr(ParseUnary());
-			if (Match(TokenType.Minus)) return new UnaryExpr("-", ParseUnary());
-			if (Match(TokenType.Not)) return new UnaryExpr("!", ParseUnary());
-			if (Match(TokenType.BitInvert)) return new UnaryExpr("~", ParseUnary());
-			return ParsePostfix();
-		}
+			public Builder(string code) => _ = code;
 
-		private Expr ParsePrimary()
-		{
-			if (Match(TokenType.Number)) return new NumberExpr(_previous.Text);
-			if (Match(TokenType.String))
+			public ProgramNode Build(GS1Parser.ProgramContext context)
 			{
-				if (_previous.Text == "\\") Error("malformed input");
-				return new StringExpr(_previous.Text);
-			}
-			if (Match(TokenType.IntCast)) return ParseCast("int");
-			if (Match(TokenType.FloatCast)) return ParseCast("float");
-			if (Match(TokenType.Translate)) return ParseCast("_");
-			if (Match(TokenType.True)) return new BoolExpr(true);
-			if (Match(TokenType.False)) return new BoolExpr(false);
-			if (Match(TokenType.Null)) return new NullExpr();
-			if (Match(TokenType.New))
-			{
-				if (_current.Type == TokenType.LeftBracket)
+				List<ProgramItem> items = [];
+				foreach (var block in context.block())
 				{
-					List<Expr> dimensions = [];
-					do
-					{
-						Expect(TokenType.LeftBracket);
-						dimensions.Add(ParseExpression());
-						Expect(TokenType.RightBracket);
-					}
-					while (_current.Type == TokenType.LeftBracket);
-					return new NewArrayExpr(dimensions);
+					if (SingleStatement(block)?.functionDefinition() is { } functionDefinition) items.Add(new FunctionItem(BuildFunction(functionDefinition)));
+					else items.Add(new StatementItem(new BlockStmt(BuildBlock(block))));
 				}
-				var typeName = ParseQualifiedIdentifierName();
-				Expect(TokenType.LeftParen);
-				List<Expr> args = [];
-				if (_current.Type != TokenType.RightParen)
-					do args.Add(ParseExpression()); while (Match(TokenType.Comma));
-				Expect(TokenType.RightParen);
-				return new NewObjectExpr(typeName, args);
+				return new([], [], items);
 			}
-			if (Match(TokenType.Function))
+
+			private static GS1Parser.StatementContext? SingleStatement(GS1Parser.BlockContext context) =>
+				context.statement().Length == 1 && context.GetChild(0) is GS1Parser.StatementContext ? context.statement(0) : null;
+
+			private FunctionNode BuildFunction(GS1Parser.FunctionDefinitionContext context)
 			{
-				Expect(TokenType.LeftParen);
-				List<Expr> args = [];
-				if (_current.Type != TokenType.RightParen)
+				if (context is not GS1Parser.StatementFunctionDefinitionContext functionDefinition) throw Failure(context);
+				var (name, objectName) = BuildFunctionName(functionDefinition.compound_identifier().GetText());
+				return new(name, objectName, false, [], BuildBlock(functionDefinition.block()));
+			}
+
+			private static (string Name, string? ObjectName) BuildFunctionName(string text)
+			{
+				var parts = text.Split('.', StringSplitOptions.RemoveEmptyEntries);
+				return parts.Length <= 1 ? (text, null) : (parts[^1], string.Join('.', parts.Take(parts.Length - 1)));
+			}
+
+			private List<Stmt> BuildBlock(GS1Parser.BlockContext context)
+			{
+				List<Stmt> statements = [];
+				foreach (var statement in context.statement())
 				{
-					do args.Add(ParseExpression()); while (Match(TokenType.Comma));
+					var built = BuildStatement(statement);
+					if (built is BlockStmt { Body.Count: 0 }) continue;
+					statements.Add(built);
 				}
-				Expect(TokenType.RightParen);
-				return new LambdaExpr($"function_{_lambdaId++}_1", args, ParseBody());
+				return statements;
 			}
-			if (Match(TokenType.LeftBrace))
+
+			private Stmt BuildStatement(GS1Parser.StatementContext context)
 			{
+				if (IsEmptyStatement(context)) return new BlockStmt([]);
+				if (context.ifStatement() is { } ifStatement) return BuildIf(ifStatement);
+				if (context.forStatement() is { } forStatement) return BuildFor(forStatement);
+				if (context.whileStatement() is { } whileStatement) return BuildWhile(whileStatement);
+				if (context.withStatement() is { } withStatement) return BuildWith(withStatement);
+				if (context.functionDefinition() is { } functionDefinition) return new ExprStmt(new CallExpr(BuildFunction(functionDefinition).Name, []));
+				if (context.flowStatement() is { } flowStatement) return BuildFlow(flowStatement);
+				if (context.builtinCommandStatement() is { } commandStatement) return BuildCommand(commandStatement);
+				if (context.userFunctionStatement() is { } userFunctionStatement) return BuildUserFunctionCall(userFunctionStatement);
+				if (context.assignmentStatement() is { } assignmentStatement) return new ExprStmt(BuildAssignmentStatement(assignmentStatement));
+				if (context.expression() is { } expression) return new ExprStmt(BuildExpression(expression));
+				throw Failure(context);
+			}
+
+			private static bool IsEmptyStatement(GS1Parser.StatementContext context) => context.END() != null && context.ChildCount == 1;
+
+			private Stmt BuildIf(GS1Parser.IfStatementContext context)
+			{
+				if (context is not GS1Parser.StatementIfContext ifStatement) throw Failure(context);
+				var blocks = ifStatement.block();
+				var hasElse = blocks.Length > 1;
+				return new IfStmt(BuildExpression(ifStatement.expression()), BuildBlock(blocks[0]), hasElse ? BuildBlock(blocks[1]) : [], hasElse);
+			}
+
+			private Stmt BuildFor(GS1Parser.ForStatementContext context)
+			{
+				if (context is not GS1Parser.StatementForContext forStatement) throw Failure(context);
+				var assignments = forStatement.assignmentStatement();
+				var expressions = forStatement.expression();
+				Expr? init = null;
+				Expr? post = null;
+				var expressionIndex = 0;
+				if (assignments.Length > 0 && assignments[0].Start.TokenIndex < forStatement.END(0).Symbol.TokenIndex) init = BuildAssignmentStatement(assignments[0]);
+				else if (expressions.Length > expressionIndex && expressions[expressionIndex].Start.TokenIndex < forStatement.END(0).Symbol.TokenIndex) init = BuildExpression(expressions[expressionIndex++]);
+				var condition = expressions.Length > expressionIndex && expressions[expressionIndex].Start.TokenIndex < forStatement.END(1).Symbol.TokenIndex ? BuildExpression(expressions[expressionIndex++]) : new BoolExpr(true);
+				if (assignments.Length > 0 && assignments[^1].Start.TokenIndex > forStatement.END(1).Symbol.TokenIndex) post = BuildAssignmentStatement(assignments[^1]);
+				else if (expressions.Length > expressionIndex) post = BuildExpression(expressions[expressionIndex]);
+				return new ForStmt(init, condition, post, BuildBlock(forStatement.block()));
+			}
+
+			private Stmt BuildWhile(GS1Parser.WhileStatementContext context)
+			{
+				if (context is not GS1Parser.StatementWhileContext whileStatement) throw Failure(context);
+				return new WhileStmt(BuildExpression(whileStatement.expression()), BuildBlock(whileStatement.block()));
+			}
+
+			private Stmt BuildWith(GS1Parser.WithStatementContext context)
+			{
+				if (context is not GS1Parser.StatementWithContext withStatement) throw Failure(context);
+				return new WithStmt(BuildExpression(withStatement.expression()), BuildBlock(withStatement.block()));
+			}
+
+			private static Stmt BuildFlow(GS1Parser.FlowStatementContext context) => context switch
+			{
+				GS1Parser.FlowReturnContext => new ReturnStmt(new NumberExpr("0")),
+				GS1Parser.FlowBreakContext => new BreakStmt(),
+				GS1Parser.FlowContinueContext => new ContinueStmt(),
+				_ => throw Failure(context)
+			};
+
+			private Expr BuildAssignmentStatement(GS1Parser.AssignmentStatementContext context)
+			{
+				if (context is not GS1Parser.StatementAssignmentContext assignment) throw Failure(context);
+				return new BinaryExpr(BuildIdentifierAccess(assignment.identifier_access()), NormalizeOperator(assignment.assignment_operator().GetText()), BuildExpression(assignment.expression()));
+			}
+
+			private Stmt BuildCommand(GS1Parser.BuiltinCommandStatementContext context)
+			{
+				if (context is not GS1Parser.StatementBuiltInCommandContext command) throw Failure(context);
+				var name = command.COMMAND().GetText().Trim();
+				var args = command.builtInCommandExpression().Select(BuildBuiltInCommandExpression).ToList();
+				if (name == "set" && args.Count > 0) return new ExprStmt(new BinaryExpr(args[0], "=", new BoolExpr(true)));
+				if (name == "unset" && args.Count > 0) return new ExprStmt(new BinaryExpr(args[0], "=", new BoolExpr(false)));
+				return new ExprStmt(new CallExpr(name, args));
+			}
+
+			private Expr BuildBuiltInCommandExpression(GS1Parser.BuiltInCommandExpressionContext context)
+			{
+				if (context.special_literal() is { } specialLiteral) return BuildSpecialLiteral(specialLiteral);
+				if (context.expression() is { } expression) return BuildExpression(expression);
+				throw Failure(context);
+			}
+
+			private Stmt BuildUserFunctionCall(GS1Parser.UserFunctionStatementContext context)
+			{
+				if (context is not GS1Parser.StatementUserFunctionCallContext call) throw Failure(context);
+				return new ExprStmt(new CallExpr(call.compound_identifier().GetText(), []));
+			}
+
+			private Expr BuildExpression(GS1Parser.ExpressionContext context)
+			{
+				if (context is not GS1Parser.ExpressionTernaryContext ternary) throw Failure(context);
+				var expression = BuildLogicalOr(ternary.logicalOrExpression());
+				var branches = ternary.expression();
+				for (var i = 0; i + 1 < branches.Length; i += 2)
+					expression = new TernaryExpr(expression, BuildExpression(branches[i]), BuildExpression(branches[i + 1]));
+				return expression;
+			}
+
+			private Expr BuildLogicalOr(GS1Parser.LogicalOrExpressionContext context)
+			{
+				if (context is not GS1Parser.ExpressionLogicOrContext logicalOr) throw Failure(context);
+				return BuildBinaryChain(logicalOr, logicalOr.logicalAndExpression(), BuildLogicalAnd);
+			}
+
+			private Expr BuildLogicalAnd(GS1Parser.LogicalAndExpressionContext context)
+			{
+				if (context is not GS1Parser.ExpressionLogicAndContext logicalAnd) throw Failure(context);
+				return BuildBinaryChain(logicalAnd, logicalAnd.equalityExpression(), BuildEquality);
+			}
+
+			private Expr BuildEquality(GS1Parser.EqualityExpressionContext context)
+			{
+				if (context is not GS1Parser.ExpressionEqualityContext equality) throw Failure(context);
+				return BuildBinaryChain(equality, equality.relationalExpression(), BuildRelational);
+			}
+
+			private Expr BuildRelational(GS1Parser.RelationalExpressionContext context)
+			{
+				if (context is not GS1Parser.ExpressionRelationalContext relational) throw Failure(context);
+				return BuildBinaryChain(relational, relational.additiveExpression(), BuildAdditive);
+			}
+
+			private Expr BuildAdditive(GS1Parser.AdditiveExpressionContext context)
+			{
+				if (context is not GS1Parser.ExpressionAdditiveContext additive) throw Failure(context);
+				return BuildBinaryChildren(additive, child => child switch
+				{
+					GS1Parser.MultiplicativeExpressionContext multiplicative => BuildMultiplicative(multiplicative),
+					ITerminalNode { Symbol.Type: GS1Parser.LITERAL } literal => BuildLiteral(literal.GetText()),
+					_ => null
+				});
+			}
+
+			private Expr BuildMultiplicative(GS1Parser.MultiplicativeExpressionContext context)
+			{
+				if (context is not GS1Parser.ExpressionMultiplicativeContext multiplicative) throw Failure(context);
+				return BuildBinaryChildren(multiplicative, child => child switch
+				{
+					GS1Parser.InExpressionContext inExpression => BuildIn(inExpression),
+					ITerminalNode { Symbol.Type: GS1Parser.LITERAL } literal => BuildLiteral(literal.GetText()),
+					_ => null
+				});
+			}
+
+			private Expr BuildIn(GS1Parser.InExpressionContext context)
+			{
+				if (context is not GS1Parser.ExpressionInContext inExpression) throw Failure(context);
+				var left = BuildExponentiation(inExpression.exponentiationExpression(0));
+				if (inExpression.OP_IN() == null) return left;
+				if (inExpression.range_literal() is { } rangeLiteral)
+				{
+					if (rangeLiteral is not GS1Parser.RangeLiteralContext range) throw Failure(rangeLiteral);
+					var expressions = range.expression();
+					return new InExpr(left, BuildExpression(expressions[0]), BuildExpression(expressions[1]));
+				}
+				return new InExpr(left, BuildPrimary(inExpression.primaryExpression()), null);
+			}
+
+			private Expr BuildExponentiation(GS1Parser.ExponentiationExpressionContext context)
+			{
+				if (context is not GS1Parser.ExpressionExponentiationContext exponentiation) throw Failure(context);
+				return BuildBinaryChain(exponentiation, exponentiation.unaryExpression(), BuildUnary);
+			}
+
+			private Expr BuildUnary(GS1Parser.UnaryExpressionContext context)
+			{
+				if (context is GS1Parser.IgnoreExpressionUnaryPrimaryContext primary) return BuildPostfix(primary.postfixExpression());
+				if (context is not GS1Parser.ExpressionUnaryContext unary) throw Failure(context);
+				var op = unary.GetChild(0).GetText();
+				var expression = BuildUnary(unary.unaryExpression());
+				return op == "+" ? expression : new UnaryExpr(op, expression);
+			}
+
+			private Expr BuildPostfix(GS1Parser.PostfixExpressionContext context)
+			{
+				if (context is GS1Parser.IgnoreExpressionPostfixPrimaryContext primary) return BuildPrimary(primary.primaryExpression());
+				if (context is not GS1Parser.ExpressionPostfixContext postfix) throw Failure(context);
+				return new UnaryExpr(postfix.GetChild(1).GetText(), BuildPrimary(postfix.primaryExpression()), true);
+			}
+
+			private Expr BuildPrimary(GS1Parser.PrimaryExpressionContext context)
+			{
+				if (context.expression() is { } expression) return BuildExpression(expression);
+				if (context.RAWMESSAGECODE() != null) return new StringExpr(context.GetText());
+				if (context.builtin_function() is { } builtInFunction) return BuildBuiltInFunction(builtInFunction);
+				if (context.array_literal() is { } arrayLiteral) return BuildArrayLiteral(arrayLiteral);
+				if (context.literal_literal() is { } literalLiteral) return BuildLiteralLiteral(literalLiteral);
+				if (context.identifier_access() is { } identifierAccess) return BuildIdentifierAccess(identifierAccess);
+				if (context.compound_string() is { } compoundString) return BuildCompoundString(compoundString);
+				throw Failure(context);
+			}
+
+			private Expr BuildBuiltInFunction(GS1Parser.Builtin_functionContext context)
+			{
+				if (context is not GS1Parser.BuiltInFunctionCallContext call) throw Failure(context);
+				return new CallExpr(call.FUNCTION().GetText(), call.expression().Select(BuildExpression).ToList());
+			}
+
+			private Expr BuildIdentifierAccess(GS1Parser.Identifier_accessContext context)
+			{
+				if (context is not GS1Parser.IdentifierAccessContext access) throw Failure(context);
+				var values = access.identifier_value();
+				var (name, indices) = BuildIdentifierValue(values[0]);
+				var expression = BuildDottedIdentifier(name, indices);
+				for (var i = 1; i < values.Length; ++i)
+				{
+					(name, indices) = BuildIdentifierValue(values[i]);
+					expression = BuildDottedMember(expression, name, indices);
+				}
+				return expression;
+			}
+
+			private (string Name, List<Expr> Indices) BuildIdentifierValue(GS1Parser.Identifier_valueContext context)
+			{
+				if (context is not GS1Parser.IdentifierValueContext value) throw Failure(context);
+				return (value.compound_identifier().GetText(), value.expression().Select(BuildExpression).ToList());
+			}
+
+			private static Expr BuildDottedIdentifier(string name, List<Expr> indices)
+			{
+				var parts = name.Split('.', StringSplitOptions.RemoveEmptyEntries);
+				if (parts.Length == 0) return ApplyIndices(new IdentifierExpr(name), indices);
+				Expr expression = new IdentifierExpr(parts[0]);
+				for (var i = 1; i < parts.Length; ++i) expression = new MemberExpr(expression, parts[i]);
+				return ApplyIndices(expression, indices);
+			}
+
+			private static Expr BuildDottedMember(Expr expression, string name, List<Expr> indices)
+			{
+				var parts = name.Split('.', StringSplitOptions.RemoveEmptyEntries);
+				if (parts.Length == 0) return ApplyIndices(new MemberExpr(expression, name), indices);
+				foreach (var part in parts) expression = new MemberExpr(expression, part);
+				return ApplyIndices(expression, indices);
+			}
+
+			private static Expr ApplyIndices(Expr expression, List<Expr> indices) => indices.Count switch
+			{
+				0 => expression,
+				1 => new ArrayIndexExpr(expression, indices[0]),
+				_ => new MultiArrayIndexExpr(expression, indices)
+			};
+
+			private Expr BuildArrayLiteral(GS1Parser.Array_literalContext context)
+			{
+				if (context is not GS1Parser.ArrayLiteralContext arrayLiteral) throw Failure(context);
 				List<Expr> values = [];
-				if (_current.Type != TokenType.RightBrace)
+				var expectingValue = true;
+				for (var i = 1; i < arrayLiteral.ChildCount - 1; ++i)
 				{
-					do
+					var child = arrayLiteral.GetChild(i);
+					if (child is ITerminalNode terminal && terminal.Symbol.Type == GS1Parser.TOKEN_COMMA)
 					{
-						if (_current.Type == TokenType.RightBrace) break;
-						values.Add(ParseExpression());
+						if (expectingValue) values.Add(new NumberExpr("0"));
+						expectingValue = true;
 					}
-					while (Match(TokenType.Comma));
+					else if (child is GS1Parser.ExpressionContext expression)
+					{
+						values.Add(BuildExpression(expression));
+						expectingValue = false;
+					}
 				}
-				Expect(TokenType.RightBrace);
 				return new ArrayLiteralExpr(values);
 			}
-			if (Match(TokenType.LeftParen))
+
+			private Expr BuildLiteralLiteral(GS1Parser.Literal_literalContext context) => BuildLiteral(context.GetText());
+
+			private Expr BuildSpecialLiteral(GS1Parser.Special_literalContext context) => context switch
 			{
-				var expr = ParseExpression();
-				Expect(TokenType.RightParen);
-				return expr;
+				GS1Parser.DirectionLiteralContext => DirectionExpr(context.GetText()),
+				_ => new StringExpr(context.GetText())
+			};
+
+			private Expr BuildCompoundString(GS1Parser.Compound_stringContext context) => new StringExpr(context.GetText());
+
+			private static Expr BuildLiteral(string text) => text switch
+			{
+				"true" => new BoolExpr(true),
+				"false" => new BoolExpr(false),
+				"allfeatures" or "allstats" => new IdentifierExpr(text),
+				_ => Number(text)
+			};
+
+			private static NumberExpr Number(string text)
+			{
+				if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+					return new NumberExpr(Convert.ToInt32(text[2..], 16).ToString(CultureInfo.InvariantCulture));
+				return new NumberExpr(text);
 			}
-			if (Match(TokenType.Identifier))
+
+			private static Expr DirectionExpr(string text) => text switch
 			{
-				var first = _previous.Text;
-				if (Match(TokenType.Scope))
+				"up" => new NumberExpr("0"),
+				"left" => new NumberExpr("1"),
+				"down" => new NumberExpr("2"),
+				"right" => new NumberExpr("3"),
+				_ => int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) ? new NumberExpr((value % 4).ToString(CultureInfo.InvariantCulture)) : new StringExpr(text)
+			};
+
+			private Expr BuildBinaryChain<TContext>(ParserRuleContext context, TContext[] operands, Func<TContext, Expr> buildOperand) where TContext : ParserRuleContext
+			{
+				var expression = buildOperand(operands[0]);
+				var operators = OperatorTexts(context);
+				for (var i = 1; i < operands.Length; ++i)
+					expression = new BinaryExpr(expression, NormalizeOperator(operators[i - 1]), buildOperand(operands[i]));
+				return expression;
+			}
+
+			private Expr BuildBinaryChildren(ParserRuleContext context, Func<IParseTree, Expr?> buildOperand)
+			{
+				Expr? expression = null;
+				string? op = null;
+				for (var i = 0; i < context.ChildCount; ++i)
 				{
-					List<string> parts = [first, Expect(TokenType.Identifier).Text];
-					while (Match(TokenType.Scope)) parts.Add(Expect(TokenType.Identifier).Text);
-					return parts.Count == 2 && !first.StartsWith('$') ? new EnumExpr(parts[0], parts[1]) : new IdentifierExpr(string.Join("::", parts));
+					var child = context.GetChild(i);
+					if (child is ITerminalNode terminal && IsBinaryOperator(terminal.Symbol.Type))
+					{
+						op = NormalizeOperator(terminal.GetText());
+						continue;
+					}
+					var operand = buildOperand(child);
+					if (operand == null) continue;
+					if (expression == null) expression = operand;
+					else expression = new BinaryExpr(expression, op ?? throw Failure(context), operand);
+					op = null;
 				}
-				return new IdentifierExpr(first);
+				return expression ?? throw Failure(context);
 			}
-			Error("malformed input");
-			return new NumberExpr("0");
-		}
 
-		private string ParseQualifiedIdentifierName()
-		{
-			var name = Expect(TokenType.Identifier).Text;
-			while (Match(TokenType.Scope)) name += "::" + Expect(TokenType.Identifier).Text;
-			return name;
-		}
-
-		private Expr ParseCast(string type)
-		{
-			Expect(TokenType.LeftParen);
-			var expression = ParseExpression();
-			Expect(TokenType.RightParen);
-			return new CastExpr(type, expression);
-		}
-
-		private int ParseSignedInt()
-		{
-			var sign = Match(TokenType.Minus) ? -1 : 1;
-			var token = Expect(TokenType.Number);
-			return sign * int.Parse(token.Text, CultureInfo.InvariantCulture);
-		}
-
-		private bool Match(TokenType type)
-		{
-			if (_current.Type != type) return false;
-			Advance();
-			return true;
-		}
-
-		private Token Expect(TokenType type)
-		{
-			if (_current.Type == type)
+			private static List<string> OperatorTexts(ParserRuleContext context)
 			{
-				var token = _current;
-				Advance();
-				return token;
+				List<string> operators = [];
+				for (var i = 0; i < context.ChildCount; ++i)
+					if (context.GetChild(i) is ITerminalNode terminal && IsBinaryOperator(terminal.Symbol.Type))
+						operators.Add(terminal.Symbol.Type == GS1Parser.OP_ASSIGN ? "==" : NormalizeOperator(terminal.GetText()));
+				return operators;
 			}
-			Error("malformed input");
-			return new(type, "", _current.Line, _current.Column);
-		}
 
-		private void Advance()
-		{
-			_previous = _current;
-			_current = _lexer.Next();
-		}
+			private static bool IsBinaryOperator(int type) => type is
+				GS1Parser.OP_LOGICALOR or GS1Parser.OP_LOGICALAND or GS1Parser.OP_EQUAL or GS1Parser.OP_ASSIGN or GS1Parser.OP_NOTEQ or
+				GS1Parser.OP_LESS or GS1Parser.OP_GREAT or GS1Parser.OP_LESS_EQ or GS1Parser.OP_GREAT_EQ or GS1Parser.OP_ADD or GS1Parser.OP_SUB or
+				GS1Parser.OP_MUL or GS1Parser.OP_DIV or GS1Parser.OP_MOD or GS1Parser.OP_POW;
 
-		private void Error(string message)
-		{
-			if (ErrorMessage != null) return;
-			ErrorMessage = $"{message} at line {_current.Line}: {_current.LineText}\n";
+			private static ParseFailure Failure(ParserRuleContext context) => new(context.Start.Line);
 		}
 	}
 
@@ -2073,191 +2338,6 @@ internal static class GS2Compiler
 		}
 	}
 
-	private sealed class Lexer
-	{
-		private readonly string _code;
-		private int _pos;
-		private int _line = 1;
-		private int _lineStart;
-		public Lexer(string code) => _code = code;
-
-		public Token Next()
-		{
-			while (_pos < _code.Length)
-			{
-				var c = _code[_pos];
-				if (c is ' ' or '\t' or '\r') { _pos++; continue; }
-				if (c == '\n') { _pos++; _line++; _lineStart = _pos; continue; }
-				if (c == '/' && Peek(1) == '/') { while (_pos < _code.Length && _code[_pos] != '\n') _pos++; continue; }
-				if (c == '/' && Peek(1) == '*') { _pos += 2; while (_pos + 1 < _code.Length && !(_code[_pos] == '*' && _code[_pos + 1] == '/')) { if (_code[_pos++] == '\n') { _line++; _lineStart = _pos; } } if (_pos + 1 < _code.Length) _pos += 2; else _pos = _code.Length; continue; }
-				break;
-			}
-			if (_pos >= _code.Length) return Make(TokenType.End, "");
-			var ch = _code[_pos];
-			if (ch == '0' && (Peek(1) == 'x' || Peek(1) == 'X')) return HexNumber();
-			if (ch == '.' && char.IsDigit(Peek(1))) return Number();
-			if (char.IsDigit(ch)) return Number();
-			if (IsIdentStart(ch)) return Identifier();
-			if (ch is '"' or '\'') return String();
-			if (ch == ':' && Peek(1) == ':') { _pos += 2; return Make(TokenType.Scope, "::"); }
-			if (ch == ':' && Peek(1) == '=') { _pos += 2; return Make(TokenType.Assign, ":="); }
-			if (ch == '+' && Peek(1) == '=') { _pos += 2; return Make(TokenType.AddAssign, "+="); }
-			if (ch == '-' && Peek(1) == '=') { _pos += 2; return Make(TokenType.SubAssign, "-="); }
-			if (ch == '*' && Peek(1) == '=') { _pos += 2; return Make(TokenType.MulAssign, "*="); }
-			if (ch == '/' && Peek(1) == '=') { _pos += 2; return Make(TokenType.DivAssign, "/="); }
-			if (ch == '^' && Peek(1) == '=') { _pos += 2; return Make(TokenType.PowAssign, "^="); }
-			if (ch == '%' && Peek(1) == '=') { _pos += 2; return Make(TokenType.ModAssign, "%="); }
-			if (ch == '@' && Peek(1) == '=') { _pos += 2; return Make(TokenType.CatAssign, "@="); }
-			if (ch == '<' && Peek(1) == '<' && Peek(2) == '=') { _pos += 3; return Make(TokenType.ShiftLeftAssign, "<<="); }
-			if (ch == '>' && Peek(1) == '>' && Peek(2) == '=') { _pos += 3; return Make(TokenType.ShiftRightAssign, ">>="); }
-			if (ch == '=' && Peek(1) == '=') { _pos += 2; return Make(TokenType.Equal, "=="); }
-			if (ch == '!' && Peek(1) == '=') { _pos += 2; return Make(TokenType.NotEqual, "!="); }
-			if (ch == '<' && Peek(1) == '>') { _pos += 2; return Make(TokenType.NotEqual, "!="); }
-			if (ch == '<' && Peek(1) == '=') { _pos += 2; return Make(TokenType.LessEqual, "<="); }
-			if (ch == '=' && Peek(1) == '<') { _pos += 2; return Make(TokenType.LessEqual, "=<"); }
-			if (ch == '>' && Peek(1) == '=') { _pos += 2; return Make(TokenType.GreaterEqual, ">="); }
-			if (ch == '=' && Peek(1) == '>') { _pos += 2; return Make(TokenType.GreaterEqual, "=>"); }
-			if (ch == '&' && Peek(1) == '&') { _pos += 2; return Make(TokenType.And, "&&"); }
-			if (ch == '|' && Peek(1) == '|') { _pos += 2; return Make(TokenType.Or, "||"); }
-			if (ch == '<' && Peek(1) == '<') { _pos += 2; return Make(TokenType.ShiftLeft, "<<"); }
-			if (ch == '>' && Peek(1) == '>') { _pos += 2; return Make(TokenType.ShiftRight, ">>"); }
-			if (ch == '+' && Peek(1) == '+') { _pos += 2; return Make(TokenType.Increment, "++"); }
-			if (ch == '-' && Peek(1) == '-') { _pos += 2; return Make(TokenType.Decrement, "--"); }
-			_pos++;
-			return ch switch
-			{
-				'=' => Make(TokenType.Assign, "="),
-				';' => Make(TokenType.Semicolon, ";"),
-				',' => Make(TokenType.Comma, ","),
-				':' => Make(TokenType.Colon, ":"),
-				'?' => Make(TokenType.Question, "?"),
-				'.' => Make(TokenType.Dot, "."),
-				'{' => Make(TokenType.LeftBrace, "{"),
-				'}' => Make(TokenType.RightBrace, "}"),
-				'(' => Make(TokenType.LeftParen, "("),
-				')' => Make(TokenType.RightParen, ")"),
-				'[' => Make(TokenType.LeftBracket, "["),
-				']' => Make(TokenType.RightBracket, "]"),
-				'-' => Make(TokenType.Minus, "-"),
-				'+' => Make(TokenType.Plus, "+"),
-				'*' => Make(TokenType.Star, "*"),
-				'/' => Make(TokenType.Slash, "/"),
-				'%' => Make(TokenType.Percent, "%"),
-				'^' => Make(TokenType.Caret, "^"),
-				'@' => Make(TokenType.At, "@"),
-				'!' => Make(TokenType.Not, "!"),
-				'~' => Make(TokenType.BitInvert, "~"),
-				'<' => Make(TokenType.Less, "<"),
-				'>' => Make(TokenType.Greater, ">"),
-				'&' => Make(TokenType.BitAnd, "&"),
-				'|' => Make(TokenType.BitOr, "|"),
-				_ => Make(TokenType.Unknown, ch.ToString())
-			};
-		}
-
-		private Token Number()
-		{
-			var start = _pos;
-			while (_pos < _code.Length && char.IsDigit(_code[_pos])) _pos++;
-			if (_pos < _code.Length && _code[_pos] == '.') { _pos++; while (_pos < _code.Length && char.IsDigit(_code[_pos])) _pos++; }
-			return Make(TokenType.Number, _code[start.._pos]);
-		}
-
-		private Token HexNumber()
-		{
-			var start = _pos;
-			_pos += 2;
-			while (_pos < _code.Length && Uri.IsHexDigit(_code[_pos])) _pos++;
-			var value = Convert.ToInt32(_code[start.._pos], 16);
-			return Make(TokenType.Number, value.ToString(CultureInfo.InvariantCulture));
-		}
-
-		private Token Identifier()
-		{
-			var start = _pos++;
-			while (_pos < _code.Length && IsIdentPart(_code[_pos])) _pos++;
-			var text = _code[start.._pos];
-			return Make(text switch
-			{
-				"const" => TokenType.Const,
-				"enum" => TokenType.Enum,
-				"function" => TokenType.Function,
-				"public" => TokenType.Public,
-				"return" => TokenType.Return,
-				"if" => TokenType.If,
-				"else" => TokenType.Else,
-				"elseif" => TokenType.ElseIf,
-				"for" => TokenType.For,
-				"while" => TokenType.While,
-				"with" => TokenType.With,
-				"new" => TokenType.New,
-				"in" => TokenType.In,
-				"SPC" => TokenType.At,
-				"NL" => TokenType.At,
-				"TAB" => TokenType.At,
-				"switch" => TokenType.Switch,
-				"case" => TokenType.Case,
-				"default" => TokenType.Default,
-				"break" => TokenType.Break,
-				"continue" => TokenType.Continue,
-				"int" => TokenType.IntCast,
-				"float" => TokenType.FloatCast,
-				"_" => TokenType.Translate,
-				"xor" => TokenType.BitXor,
-				"true" => TokenType.True,
-				"false" => TokenType.False,
-				"null" => TokenType.Null,
-				_ => TokenType.Identifier
-			}, text switch { "SPC" => " ", "NL" => "\n", "TAB" => "\t", _ => text });
-		}
-
-		private Token String()
-		{
-			var quote = _code[_pos];
-			_pos++;
-			StringBuilder builder = new();
-			while (_pos < _code.Length && _code[_pos] != quote)
-			{
-				if (_code[_pos] == '\\' && _pos + 1 < _code.Length)
-				{
-					_pos++;
-					builder.Append(_code[_pos] switch { 'n' => '\n', 't' => '\t', 'r' => '\r', '"' => '"', '\'' => '\'', '\\' => '\\', var c => c });
-					_pos++;
-				}
-				else if (_code[_pos] == '\r' && Peek(1) == '\n')
-				{
-					builder.Append('\n');
-					_pos += 2;
-					_line++;
-					_lineStart = _pos;
-				}
-				else if (_code[_pos] == '\n')
-				{
-					builder.Append('\n');
-					_pos++;
-					_line++;
-					_lineStart = _pos;
-				}
-				else builder.Append(_code[_pos++]);
-			}
-			if (_pos < _code.Length) _pos++;
-			return Make(TokenType.String, builder.ToString());
-		}
-
-		private char Peek(int offset) => _pos + offset < _code.Length ? _code[_pos + offset] : '\0';
-		private Token Make(TokenType type, string text) => new(type, text, _line, _pos - _lineStart + 1) { LineText = CurrentLine() };
-		private string CurrentLine()
-		{
-			var end = _code.IndexOf('\n', _lineStart);
-			if (end < 0) end = _code.Length;
-			return _code[_lineStart..end];
-		}
-		private static bool IsIdentStart(char c) => char.IsLetter(c) || c is '_' or '$';
-		private static bool IsIdentPart(char c) => char.IsLetterOrDigit(c) || c is '_' or '$';
-	}
-
-	private enum TokenType { Unknown, End, Identifier, Number, String, Const, Enum, Function, Public, Return, If, Else, ElseIf, For, While, With, New, In, Switch, Case, Default, Break, Continue, IntCast, FloatCast, Translate, True, False, Null, Assign, AddAssign, SubAssign, MulAssign, DivAssign, PowAssign, ModAssign, CatAssign, ShiftLeftAssign, ShiftRightAssign, Semicolon, Comma, Colon, Question, Dot, Scope, LeftBrace, RightBrace, LeftParen, RightParen, LeftBracket, RightBracket, Minus, Plus, Star, Slash, Percent, Caret, At, Not, BitInvert, Equal, NotEqual, Less, LessEqual, Greater, GreaterEqual, And, Or, BitAnd, BitOr, BitXor, ShiftLeft, ShiftRight, Increment, Decrement }
-	private sealed record Token(TokenType Type, string Text, int Line, int Column) { public string LineText { get; init; } = ""; }
 	private sealed record ProgramNode(Dictionary<string, Expr> Constants, Dictionary<string, Dictionary<string, int>> Enums, List<ProgramItem> Items);
 	private abstract record ProgramItem;
 	private sealed record FunctionItem(FunctionNode Function) : ProgramItem;
