@@ -6,24 +6,17 @@ public partial class GS1Lexer
 	{
 		POPMODE_COMMAND,
 		POPMODE_FUNCTION,
-		POPMODE_ARRAYINDEX
+		POPMODE_ARRAYINDEX,
 	}
 
 	private const POPMODE POPMODE_FUNCTION = POPMODE.POPMODE_FUNCTION;
 
-	private sealed class CommandState
+	private sealed class CommandState(string arguments, POPMODE popMode, bool commaPop)
 	{
-		public string Arguments { get; private set; }
-		public int Index { get; private set; }
-		public POPMODE popMode;
-		public bool commaPop;
-
-		public CommandState(string arguments, POPMODE popMode, bool commaPop)
-		{
-			Arguments = arguments;
-			this.popMode = popMode;
-			this.commaPop = commaPop;
-		}
+		public string  Arguments { get; private set; } = arguments;
+		public int     Index     { get; private set; }
+		public POPMODE popMode  = popMode;
+		public bool    commaPop = commaPop;
 
 		public bool HasArguments => Index < Arguments.Length;
 		public char CurrentArgument => Arguments[Index];
@@ -238,7 +231,7 @@ public partial class GS1Lexer
 		"savelog2",
 		"warpto",
 		"enabledamagereactions",
-		"disabledamagereactions"
+		"disabledamagereactions",
 	];
 
 	private int m_braceCount;

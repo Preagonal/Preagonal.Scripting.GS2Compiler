@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using Antlr4.Runtime;
 using Antlr4.Runtime.Tree;
+using Preagonal.Scripting.GS2Compiler.Enums;
 
 namespace Preagonal.Scripting.GS2Compiler;
 
@@ -17,11 +18,11 @@ internal static class GS2Compiler
 		{
 			ScriptGrammar.GS2 => AntlrGs2Parser.Parse(code),
 			ScriptGrammar.GS1 => AntlrGs1Parser.Parse(code),
-			_ => AntlrGs2Parser.Parse(code)
+			_ => AntlrGs2Parser.Parse(code),
 		};
 		if (parseResult.ErrorMessage != null || parseResult.Program == null) return new() { Success = false, ErrMsg = parseResult.ErrorMessage ?? "malformed input\n", ByteCode = [] };
 		var program = parseResult.Program;
-		var bytecode = new BytecodeWriter();
+		var bytecode = new BytecodeWriter(program.Gs1EventFlags);
 		var emitter = new Emitter(bytecode, program.Constants, program.Enums);
 		foreach (var item in program.Items)
 		{
@@ -34,11 +35,9 @@ internal static class GS2Compiler
 
 	private sealed record ParseResult(ProgramNode? Program, string? ErrorMessage);
 
-	private sealed class ParseFailure : Exception
+	private sealed class ParseFailure(int line) : Exception
 	{
-		public int Line { get; }
-
-		public ParseFailure(int line) => Line = line;
+		public int Line { get; } = line;
 	}
 
 	private sealed class ThrowingErrorListener : IAntlrErrorListener<int>, IAntlrErrorListener<IToken>
@@ -70,7 +69,7 @@ internal static class GS2Compiler
 	{
 		":=" => "=",
 		"<>" => "!=",
-		_ => op
+		_ => op,
 	};
 
 	private static class AntlrGs2Parser
@@ -108,14 +107,20 @@ internal static class GS2Compiler
 			public ProgramNode Build(GS2Parser.ScriptContext context)
 			{
 				List<ProgramItem> items = [];
+				var gs1EventFlags = 0;
 				foreach (var declaration in context.declaration())
 				{
 					if (declaration.constDeclaration() is { } constDeclaration) BuildConst(constDeclaration);
 					else if (declaration.enumDeclaration() is { } enumDeclaration) BuildEnum(enumDeclaration);
 					else if (declaration.functionDeclaration() is { } functionDeclaration) items.Add(new FunctionItem(BuildFunction(functionDeclaration)));
-					else if (declaration.statement() is { } statement) items.Add(new StatementItem(BuildStatement(statement)));
+					else if (declaration.statement() is { } statement)
+					{
+						var builtStatement = BuildStatement(statement);
+						gs1EventFlags |= Gs1EventFlagScanner.Scan(builtStatement);
+						items.Add(new StatementItem(builtStatement));
+					}
 				}
-				return new(_constants, _enums, items);
+				return new(_constants, _enums, items, gs1EventFlags);
 			}
 
 			private void BuildConst(GS2Parser.ConstDeclarationContext context) => _constants[context.IDENTIFIER().GetText()] = BuildExpression(context.expression());
@@ -137,7 +142,7 @@ internal static class GS2Compiler
 			{
 				NumberExpr number => int.Parse(number.Text, CultureInfo.InvariantCulture),
 				UnaryExpr { Op: "-", Expression: NumberExpr number } => -int.Parse(number.Text, CultureInfo.InvariantCulture),
-				_ => 0
+				_ => 0,
 			};
 
 			private FunctionNode BuildFunction(GS2Parser.FunctionDeclarationContext context)
@@ -199,22 +204,22 @@ internal static class GS2Compiler
 
 			private static bool IsEmptyStatement(GS2Parser.StatementContext context) => context.SEMI() != null && context.ChildCount == 1;
 
-			private Stmt BuildIf(GS2Parser.IfStatementContext context)
+			private IfStmt BuildIf(GS2Parser.IfStatementContext context)
 			{
 				var hasElse = context.ELSE() != null || context.ELSEIF() != null;
 				List<Stmt> elseBody = [];
 				if (context.ELSE() != null) elseBody = BuildStatementBody(context.statement(1));
 				else if (context.ifTail() != null) elseBody = [BuildIfTail(context.ifTail())];
-				return new IfStmt(BuildExpression(context.expression()), BuildStatementBody(context.statement(0)), elseBody, hasElse);
+				return new(BuildExpression(context.expression()), BuildStatementBody(context.statement(0)), elseBody, hasElse);
 			}
 
-			private Stmt BuildIfTail(GS2Parser.IfTailContext context)
+			private IfStmt BuildIfTail(GS2Parser.IfTailContext context)
 			{
 				var hasElse = context.ELSE() != null || context.ELSEIF() != null;
 				List<Stmt> elseBody = [];
 				if (context.ELSE() != null) elseBody = BuildStatementBody(context.statement(1));
 				else if (context.ifTail() != null) elseBody = [BuildIfTail(context.ifTail())];
-				return new IfStmt(BuildExpression(context.expression()), BuildStatementBody(context.statement(0)), elseBody, hasElse);
+				return new(BuildExpression(context.expression()), BuildStatementBody(context.statement(0)), elseBody, hasElse);
 			}
 
 			private Stmt BuildFor(GS2Parser.ForStatementContext context)
@@ -230,7 +235,7 @@ internal static class GS2Compiler
 				return new ForStmt(init, condition, post, BuildStatementBody(context.statement()));
 			}
 
-			private Stmt BuildSwitch(GS2Parser.SwitchStatementContext context)
+			private SwitchStmt BuildSwitch(GS2Parser.SwitchStatementContext context)
 			{
 				List<SwitchCase> cases = [];
 				List<Expr?> labels = [];
@@ -248,7 +253,7 @@ internal static class GS2Compiler
 					if (labels.Count > 1) labels.Reverse();
 					cases.Add(new([.. labels], []));
 				}
-				return new SwitchStmt(BuildExpression(context.expression()), cases);
+				return new(BuildExpression(context.expression()), cases);
 			}
 
 			private Expr BuildExpression(GS2Parser.ExpressionContext context) => BuildAssignment(context.assignmentExpression());
@@ -305,7 +310,7 @@ internal static class GS2Compiler
 				return op switch
 				{
 					"@" => new StringCastExpr(expression),
-					_ => new UnaryExpr(op, expression)
+					_ => new UnaryExpr(op, expression),
 				};
 			}
 
@@ -341,7 +346,7 @@ internal static class GS2Compiler
 						MemberExpr member => new MethodCallExpr(member.Object, member.Name, args),
 						DynamicMemberExpr member => new DynamicMethodCallExpr(member.Object, member.Name, args),
 						CallExpr call => new ChainedCallExpr(call, args),
-						_ => expression
+						_ => expression,
 					};
 				}
 				return expression;
@@ -357,7 +362,7 @@ internal static class GS2Compiler
 			{
 				StringCastExpr cast => cast.Expression,
 				BinaryExpr { Left: StringCastExpr cast, Op: var op, Right: var right } => new BinaryExpr(cast.Expression, op, right),
-				_ => expression
+				_ => expression,
 			};
 
 			private Expr BuildPrimary(GS2Parser.PrimaryExpressionContext context)
@@ -387,14 +392,14 @@ internal static class GS2Compiler
 				return parts.Length == 2 && !parts[0].StartsWith('$') ? new EnumExpr(parts[0], parts[1]) : new IdentifierExpr(text);
 			}
 
-			private Expr BuildCast(GS2Parser.CastExpressionContext context)
+			private CastExpr BuildCast(GS2Parser.CastExpressionContext context)
 			{
 				var type = context.INT_CAST() != null ? "int" : context.FLOAT_CAST() != null ? "float" : "_";
-				return new CastExpr(type, BuildExpression(context.expression()));
+				return new(type, BuildExpression(context.expression()));
 			}
 
-			private Expr BuildLambda(GS2Parser.LambdaExpressionContext context) =>
-				new LambdaExpr($"function_{_lambdaId++}_1", BuildArguments(context.argumentList()), BuildStatementBody(context.statement()));
+			private LambdaExpr BuildLambda(GS2Parser.LambdaExpressionContext context) =>
+				new($"function_{_lambdaId++}_1", BuildArguments(context.argumentList()), BuildStatementBody(context.statement()));
 
 			private Expr BuildNewExpression(GS2Parser.NewExpressionContext context) =>
 				context.IDENTIFIER() != null ? new NewObjectExpr(context.IDENTIFIER().GetText(), BuildArguments(context.argumentList())) : new NewArrayExpr(context.arrayRank().Select(rank => BuildExpression(rank.expression())).ToList());
@@ -403,12 +408,12 @@ internal static class GS2Compiler
 			{
 				0 => zeroWhenEmpty ? new ArrayIndexExpr(expression, new NumberExpr("0")) : expression,
 				1 => new ArrayIndexExpr(expression, indices[0]),
-				_ => new MultiArrayIndexExpr(expression, indices)
+				_ => new MultiArrayIndexExpr(expression, indices),
 			};
 
 			private List<Expr> BuildArguments(GS2Parser.ArgumentListContext? context) => context == null ? [] : context.expression().Select(BuildExpression).ToList();
 
-			private Expr BuildBinaryChain<TContext>(ParserRuleContext context, TContext[] operands, Func<TContext, Expr> buildOperand) where TContext : ParserRuleContext
+			private static Expr BuildBinaryChain<TContext>(ParserRuleContext context, TContext[] operands, Func<TContext, Expr> buildOperand) where TContext : ParserRuleContext
 			{
 				var expression = buildOperand(operands[0]);
 				var operators = OperatorTexts(context);
@@ -468,12 +473,18 @@ internal static class GS2Compiler
 			public ProgramNode Build(GS1Parser.ProgramContext context)
 			{
 				List<ProgramItem> items = [];
+				var gs1EventFlags = 0;
 				foreach (var block in context.block())
 				{
 					if (SingleStatement(block)?.functionDefinition() is { } functionDefinition) items.Add(new FunctionItem(BuildFunction(functionDefinition)));
-					else items.Add(new StatementItem(new BlockStmt(BuildBlock(block))));
+					else
+					{
+						var statement = new BlockStmt(BuildBlock(block));
+						gs1EventFlags |= Gs1EventFlagScanner.Scan(statement);
+						items.Add(new StatementItem(statement));
+					}
 				}
-				return new([], [], items);
+				return new([], [], items, gs1EventFlags);
 			}
 
 			private static GS1Parser.StatementContext? SingleStatement(GS1Parser.BlockContext context) =>
@@ -522,15 +533,15 @@ internal static class GS2Compiler
 
 			private static bool IsEmptyStatement(GS1Parser.StatementContext context) => context.END() != null && context.ChildCount == 1;
 
-			private Stmt BuildIf(GS1Parser.IfStatementContext context)
+			private IfStmt BuildIf(GS1Parser.IfStatementContext context)
 			{
 				if (context is not GS1Parser.StatementIfContext ifStatement) throw Failure(context);
 				var blocks = ifStatement.block();
 				var hasElse = blocks.Length > 1;
-				return new IfStmt(BuildExpression(ifStatement.expression()), BuildBlock(blocks[0]), hasElse ? BuildBlock(blocks[1]) : [], hasElse);
+				return new(BuildExpression(ifStatement.expression()), BuildBlock(blocks[0]), hasElse ? BuildBlock(blocks[1]) : [], hasElse);
 			}
 
-			private Stmt BuildFor(GS1Parser.ForStatementContext context)
+			private ForStmt BuildFor(GS1Parser.ForStatementContext context)
 			{
 				if (context is not GS1Parser.StatementForContext forStatement) throw Failure(context);
 				var assignments = forStatement.assignmentStatement();
@@ -543,13 +554,13 @@ internal static class GS2Compiler
 				var condition = expressions.Length > expressionIndex && expressions[expressionIndex].Start.TokenIndex < forStatement.END(1).Symbol.TokenIndex ? BuildExpression(expressions[expressionIndex++]) : new BoolExpr(true);
 				if (assignments.Length > 0 && assignments[^1].Start.TokenIndex > forStatement.END(1).Symbol.TokenIndex) post = BuildAssignmentStatement(assignments[^1]);
 				else if (expressions.Length > expressionIndex) post = BuildExpression(expressions[expressionIndex]);
-				return new ForStmt(init, condition, post, BuildBlock(forStatement.block()));
+				return new(init, condition, post, BuildBlock(forStatement.block()));
 			}
 
-			private Stmt BuildWhile(GS1Parser.WhileStatementContext context)
+			private WhileStmt BuildWhile(GS1Parser.WhileStatementContext context)
 			{
 				if (context is not GS1Parser.StatementWhileContext whileStatement) throw Failure(context);
-				return new WhileStmt(BuildExpression(whileStatement.expression()), BuildBlock(whileStatement.block()));
+				return new(BuildExpression(whileStatement.expression()), BuildBlock(whileStatement.block()));
 			}
 
 			private Stmt BuildWith(GS1Parser.WithStatementContext context)
@@ -563,23 +574,23 @@ internal static class GS2Compiler
 				GS1Parser.FlowReturnContext => new ReturnStmt(new NumberExpr("0")),
 				GS1Parser.FlowBreakContext => new BreakStmt(),
 				GS1Parser.FlowContinueContext => new ContinueStmt(),
-				_ => throw Failure(context)
+				_ => throw Failure(context),
 			};
 
-			private Expr BuildAssignmentStatement(GS1Parser.AssignmentStatementContext context)
+			private BinaryExpr BuildAssignmentStatement(GS1Parser.AssignmentStatementContext context)
 			{
 				if (context is not GS1Parser.StatementAssignmentContext assignment) throw Failure(context);
-				return new BinaryExpr(BuildIdentifierAccess(assignment.identifier_access()), NormalizeOperator(assignment.assignment_operator().GetText()), BuildExpression(assignment.expression()));
+				return new(BuildIdentifierAccess(assignment.identifier_access()), NormalizeOperator(assignment.assignment_operator().GetText()), BuildExpression(assignment.expression()));
 			}
 
-			private Stmt BuildCommand(GS1Parser.BuiltinCommandStatementContext context)
+			private ExprStmt BuildCommand(GS1Parser.BuiltinCommandStatementContext context)
 			{
 				if (context is not GS1Parser.StatementBuiltInCommandContext command) throw Failure(context);
 				var name = command.COMMAND().GetText().Trim();
 				var args = command.builtInCommandExpression().Select(BuildBuiltInCommandExpression).ToList();
-				if (name == "set" && args.Count > 0) return new ExprStmt(new BinaryExpr(args[0], "=", new BoolExpr(true)));
-				if (name == "unset" && args.Count > 0) return new ExprStmt(new BinaryExpr(args[0], "=", new BoolExpr(false)));
-				return new ExprStmt(new CallExpr(name, args));
+				if (name == "set" && args.Count > 0) return new(new BinaryExpr(args[0], "=", new BoolExpr(true)));
+				if (name == "unset" && args.Count > 0) return new(new BinaryExpr(args[0], "=", new BoolExpr(false)));
+				return new(new CallExpr(name, args));
 			}
 
 			private Expr BuildBuiltInCommandExpression(GS1Parser.BuiltInCommandExpressionContext context)
@@ -589,10 +600,10 @@ internal static class GS2Compiler
 				throw Failure(context);
 			}
 
-			private Stmt BuildUserFunctionCall(GS1Parser.UserFunctionStatementContext context)
+			private ExprStmt BuildUserFunctionCall(GS1Parser.UserFunctionStatementContext context)
 			{
 				if (context is not GS1Parser.StatementUserFunctionCallContext call) throw Failure(context);
-				return new ExprStmt(new CallExpr(call.compound_identifier().GetText(), []));
+				return new(new CallExpr(call.compound_identifier().GetText(), []));
 			}
 
 			private Expr BuildExpression(GS1Parser.ExpressionContext context)
@@ -636,7 +647,7 @@ internal static class GS2Compiler
 				{
 					GS1Parser.MultiplicativeExpressionContext multiplicative => BuildMultiplicative(multiplicative),
 					ITerminalNode { Symbol.Type: GS1Parser.LITERAL } literal => BuildLiteral(literal.GetText()),
-					_ => null
+					_ => null,
 				});
 			}
 
@@ -647,7 +658,7 @@ internal static class GS2Compiler
 				{
 					GS1Parser.InExpressionContext inExpression => BuildIn(inExpression),
 					ITerminalNode { Symbol.Type: GS1Parser.LITERAL } literal => BuildLiteral(literal.GetText()),
-					_ => null
+					_ => null,
 				});
 			}
 
@@ -699,10 +710,10 @@ internal static class GS2Compiler
 				throw Failure(context);
 			}
 
-			private Expr BuildBuiltInFunction(GS1Parser.Builtin_functionContext context)
+			private CallExpr BuildBuiltInFunction(GS1Parser.Builtin_functionContext context)
 			{
 				if (context is not GS1Parser.BuiltInFunctionCallContext call) throw Failure(context);
-				return new CallExpr(call.FUNCTION().GetText(), call.expression().Select(BuildExpression).ToList());
+				return new(call.FUNCTION().GetText(), call.expression().Select(BuildExpression).ToList());
 			}
 
 			private Expr BuildIdentifierAccess(GS1Parser.Identifier_accessContext context)
@@ -746,10 +757,10 @@ internal static class GS2Compiler
 			{
 				0 => expression,
 				1 => new ArrayIndexExpr(expression, indices[0]),
-				_ => new MultiArrayIndexExpr(expression, indices)
+				_ => new MultiArrayIndexExpr(expression, indices),
 			};
 
-			private Expr BuildArrayLiteral(GS1Parser.Array_literalContext context)
+			private ArrayLiteralExpr BuildArrayLiteral(GS1Parser.Array_literalContext context)
 			{
 				if (context is not GS1Parser.ArrayLiteralContext arrayLiteral) throw Failure(context);
 				List<Expr> values = [];
@@ -768,32 +779,32 @@ internal static class GS2Compiler
 						expectingValue = false;
 					}
 				}
-				return new ArrayLiteralExpr(values);
+				return new(values);
 			}
 
-			private Expr BuildLiteralLiteral(GS1Parser.Literal_literalContext context) => BuildLiteral(context.GetText());
+			private static Expr BuildLiteralLiteral(GS1Parser.Literal_literalContext context) => BuildLiteral(context.GetText());
 
-			private Expr BuildSpecialLiteral(GS1Parser.Special_literalContext context) => context switch
+			private static Expr BuildSpecialLiteral(GS1Parser.Special_literalContext context) => context switch
 			{
 				GS1Parser.DirectionLiteralContext => DirectionExpr(context.GetText()),
-				_ => new StringExpr(context.GetText())
+				_ => new StringExpr(context.GetText()),
 			};
 
-			private Expr BuildCompoundString(GS1Parser.Compound_stringContext context) => new StringExpr(context.GetText());
+			private static Expr BuildCompoundString(GS1Parser.Compound_stringContext context) => new StringExpr(context.GetText());
 
 			private static Expr BuildLiteral(string text) => text switch
 			{
 				"true" => new BoolExpr(true),
 				"false" => new BoolExpr(false),
 				"allfeatures" or "allstats" => new IdentifierExpr(text),
-				_ => Number(text)
+				_ => Number(text),
 			};
 
 			private static NumberExpr Number(string text)
 			{
 				if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
-					return new NumberExpr(Convert.ToInt32(text[2..], 16).ToString(CultureInfo.InvariantCulture));
-				return new NumberExpr(text);
+					return new(Convert.ToInt32(text[2..], 16).ToString(CultureInfo.InvariantCulture));
+				return new(text);
 			}
 
 			private static Expr DirectionExpr(string text) => text switch
@@ -802,10 +813,10 @@ internal static class GS2Compiler
 				"left" => new NumberExpr("1"),
 				"down" => new NumberExpr("2"),
 				"right" => new NumberExpr("3"),
-				_ => int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) ? new NumberExpr((value % 4).ToString(CultureInfo.InvariantCulture)) : new StringExpr(text)
+				_ => int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) ? new NumberExpr((value % 4).ToString(CultureInfo.InvariantCulture)) : new StringExpr(text),
 			};
 
-			private Expr BuildBinaryChain<TContext>(ParserRuleContext context, TContext[] operands, Func<TContext, Expr> buildOperand) where TContext : ParserRuleContext
+			private static Expr BuildBinaryChain<TContext>(ParserRuleContext context, TContext[] operands, Func<TContext, Expr> buildOperand) where TContext : ParserRuleContext
 			{
 				var expression = buildOperand(operands[0]);
 				var operators = OperatorTexts(context);
@@ -814,7 +825,7 @@ internal static class GS2Compiler
 				return expression;
 			}
 
-			private Expr BuildBinaryChildren(ParserRuleContext context, Func<IParseTree, Expr?> buildOperand)
+			private static Expr BuildBinaryChildren(ParserRuleContext context, Func<IParseTree, Expr?> buildOperand)
 			{
 				Expr? expression = null;
 				string? op = null;
@@ -853,56 +864,152 @@ internal static class GS2Compiler
 		}
 	}
 
-	private sealed class Emitter
+	private static class Gs1EventFlagScanner
 	{
-		private readonly BytecodeWriter _bytecode;
-		private readonly Dictionary<string, Expr> _constants;
-		private readonly Dictionary<string, Dictionary<string, int>> _enums;
-		private readonly Stack<List<int>> _breakPatches = new();
-		private readonly Stack<List<int>> _continuePatches = new();
-		private readonly Stack<List<int>> _conditionFailPatches = new();
-		private readonly Stack<List<int>> _conditionSuccessPatches = new();
-		private readonly Dictionary<string, string> _negativeFloatText = new(StringComparer.Ordinal);
-		private readonly Stack<HashSet<string>> _tempAliases = new();
-		private int _newObjectCount;
-		private bool _dynamicMethodName;
-
-		public Emitter(BytecodeWriter bytecode, Dictionary<string, Expr> constants, Dictionary<string, Dictionary<string, int>> enums)
+		private static readonly Dictionary<string, int> EventFlags = new(StringComparer.OrdinalIgnoreCase)
 		{
-			_bytecode = bytecode;
-			_constants = constants;
-			_enums = enums;
+			["playerenters"]       = 1 << 0,
+			["playertouchsme"]     = 1 << 1,
+			["playertouchesme"]    = 1 << 1,
+			["playertouchsother"]  = 1 << 2,
+			["playertouchesother"] = 1 << 2,
+			["playerchats"]        = 1 << 3,
+			["playerhurt"]         = 1 << 4,
+			["playerhurted"]       = 1 << 4,
+			["playerdies"]         = 1 << 5,
+			["playerlaysitem"]     = 1 << 6,
+			["playerendsreading"]  = 1 << 7,
+			["compusdied"]         = 1 << 8,
+			["emoticon"]           = 1 << 9,
+			["mousedown"]          = 1 << 10,
+			["mouseup"]            = 1 << 11,
+			["mousewheel"]         = 1 << 12,
+			["exploded"]           = 1 << 13,
+			["wasshot"]            = 1 << 14,
+			["wasshooted"]         = 1 << 14,
+			["waspelt"]            = 1 << 15,
+			["keypressed"]         = 1 << 16,
+			["actionprojectile2"]  = 1 << 17,
+			["playerleaves"]       = 1 << 21,
+			["washit"]             = 1 << 22,
+			["shapetrigger"]       = 1 << 25,
+			["playanimation"]      = 1 << 26,
+			["pkzonechanges"]      = 1 << 27,
+		};
+
+		public static int Scan(Stmt statement) => ScanStatement(statement);
+
+		private static int ScanStatements(List<Stmt> statements)
+		{
+			var flags = 0;
+			foreach (var statement in statements) flags |= ScanStatement(statement);
+			return flags;
 		}
+
+		private static int ScanStatement(Stmt statement) => statement switch
+		{
+			ExprStmt exprStmt => ScanExpression(exprStmt.Expression),
+			InlineStmt inline => ScanStatement(inline.Statement),
+			BlockStmt block => ScanStatements(block.Body),
+			ReturnStmt returnStmt => ScanExpression(returnStmt.Expression),
+			IfStmt ifStmt => ScanExpression(ifStmt.Condition) | ScanStatements(ifStmt.ThenBody) | ScanStatements(ifStmt.ElseBody),
+			ForStmt forStmt => ScanExpression(forStmt.Init) | ScanExpression(forStmt.Condition) | ScanExpression(forStmt.Post) | ScanStatements(forStmt.Body),
+			ForEachStmt forEachStmt => ScanExpression(forEachStmt.Name) | ScanExpression(forEachStmt.Source) | ScanStatements(forEachStmt.Body),
+			WhileStmt whileStmt => ScanExpression(whileStmt.Condition) | ScanStatements(whileStmt.Body),
+			WithStmt withStmt => ScanExpression(withStmt.Target) | ScanStatements(withStmt.Body),
+			SwitchStmt switchStmt => ScanSwitch(switchStmt),
+			NewStmt newStmt => ScanExpressions(newStmt.Args) | ScanStatements(newStmt.Body),
+			_ => 0,
+		};
+
+		private static int ScanSwitch(SwitchStmt statement)
+		{
+			var flags = ScanExpression(statement.Expression);
+			foreach (var switchCase in statement.Cases)
+			{
+				foreach (var label in switchCase.Labels) flags |= ScanExpression(label);
+				flags |= ScanStatements(switchCase.Body);
+			}
+			return flags;
+		}
+
+		private static int ScanExpressions(IEnumerable<Expr> expressions)
+		{
+			var flags = 0;
+			foreach (var expression in expressions) flags |= ScanExpression(expression);
+			return flags;
+		}
+
+		private static int ScanExpression(Expr? expression) => expression switch
+		{
+			null => 0,
+			BinaryExpr { Op: "=" or "+=" or "-=" or "*=" or "/=" or "%=" or "^=" or "@=" or "<<=" or ">>=" } binary => ScanExpression(binary.Right),
+			BinaryExpr binary => ScanExpression(binary.Left) | ScanExpression(binary.Right),
+			InExpr inExpr => ScanExpression(inExpr.Expression) | ScanExpression(inExpr.Lower) | ScanExpression(inExpr.Upper),
+			TernaryExpr ternary => ScanExpression(ternary.Condition) | ScanExpression(ternary.WhenTrue) | ScanExpression(ternary.WhenFalse),
+			UnaryExpr unary => ScanExpression(unary.Expression),
+			StringCastExpr cast => ScanExpression(cast.Expression),
+			CastExpr cast => ScanExpression(cast.Expression),
+			MemberExpr member => ScanExpression(member.Object),
+			DynamicMemberExpr member => ScanExpression(member.Object) | ScanExpression(member.Name),
+			DynamicVarExpr dynamicVar => ScanExpression(dynamicVar.Name),
+			ArrayIndexExpr arrayIndex => ScanExpression(arrayIndex.Target) | ScanExpression(arrayIndex.Index),
+			MultiArrayIndexExpr arrayIndex => ScanExpression(arrayIndex.Target) | ScanExpressions(arrayIndex.Indices),
+			IdentifierExpr identifier => EventFlags.GetValueOrDefault(identifier.Name),
+			CallExpr call => ScanExpressions(call.Args),
+			ChainedCallExpr call => ScanExpression(call.Call) | ScanExpressions(call.Args),
+			MethodCallExpr call => ScanExpression(call.Object) | ScanExpressions(call.Args),
+			DynamicMethodCallExpr call => ScanExpression(call.Object) | ScanExpression(call.Name) | ScanExpressions(call.Args),
+			NewObjectExpr newObject => ScanExpressions(newObject.Args),
+			NewArrayExpr newArray => ScanExpressions(newArray.Dimensions),
+			_ => 0,
+		};
+	}
+
+	private sealed class Emitter(
+		BytecodeWriter bytecode,
+		Dictionary<string, Expr> constants,
+		Dictionary<string, Dictionary<string, int>> enums
+	)
+	{
+		private readonly Stack<List<int>>                            _breakPatches            = new();
+		private readonly Stack<List<int>>                            _continuePatches         = new();
+		private readonly Stack<List<int>>                            _conditionFailPatches    = new();
+		private readonly Stack<List<int>>                            _conditionSuccessPatches = new();
+		private readonly Dictionary<string, string>                  _negativeFloatText       = new(StringComparer.Ordinal);
+		private readonly Stack<HashSet<string>>                      _tempAliases             = new();
+		private          int                                         _newObjectCount;
+		private          bool                                        _dynamicMethodName;
 
 		public void EmitFunction(FunctionNode node, bool patchToFinal = true)
 		{
-			_bytecode.Emit(Op.SetIndex);
-			var jmpLoc = _bytecode.EmitNumberOperandPlaceholder();
+			bytecode.Emit(Op.SetIndex);
+			var jmpLoc = bytecode.EmitNumberOperandPlaceholder();
 			var functionName = node.Public ? "public." : "";
 			if (!string.IsNullOrEmpty(node.ObjectName)) functionName += node.ObjectName + ".";
 			functionName += node.Name;
 			if (node.ObjectName == "universe") functionName = (node.Public ? "public." : "") + node.Name + "," + functionName;
-			var addedFunction = _bytecode.AddFunction(functionName, _bytecode.OpIndex, 0);
+			var addedFunction = bytecode.AddFunction(functionName, bytecode.OpIndex, 0);
 			_tempAliases.Push(CollectTempAliases(node));
-			_bytecode.Emit(Op.TypeArray);
+			bytecode.Emit(Op.TypeArray);
 			for (var i = node.Args.Count - 1; i >= 0; --i) Emit(node.Args[i]);
-			_bytecode.Emit(Op.FuncParamsEnd);
-			_bytecode.Emit(Op.Jmp);
-			if (node.Body.Exists(ContainsCall)) _bytecode.Emit(Op.CmdCall);
+			bytecode.Emit(Op.FuncParamsEnd);
+			bytecode.Emit(Op.Jmp);
+			if (node.Body.Exists(ContainsCall)) bytecode.Emit(Op.CmdCall);
 			foreach (var statement in node.Body) EmitStatement(statement);
 			_tempAliases.Pop();
 			var lastStatement = LastMeaningfulStatement(node.Body);
 			if (node.Name != "getPreviewSpriteCount" && (lastStatement == null || !DefinitelyReturns(lastStatement)))
 			{
-				_bytecode.Emit(Op.TypeNumber);
-				_bytecode.EmitDynamicNumber(0);
-				_bytecode.Emit(Op.Ret);
+				bytecode.Emit(Op.TypeNumber);
+				bytecode.EmitDynamicNumber(0);
+				bytecode.Emit(Op.Ret);
 			}
 			if (patchToFinal)
 			{
-				if (addedFunction) _bytecode.AddPrejumpPatch(jmpLoc);
+				if (addedFunction) bytecode.AddPrejumpPatch(jmpLoc);
 			}
-			else _bytecode.PatchShort(jmpLoc, _bytecode.OpIndex);
+			else bytecode.PatchShort(jmpLoc, bytecode.OpIndex);
 		}
 
 		public void EmitTopLevel(List<Stmt> statements)
@@ -916,7 +1023,7 @@ internal static class GS2Compiler
 			InlineStmt inlineStatement => DefinitelyReturns(inlineStatement.Statement),
 			BlockStmt blockStatement => LastMeaningfulStatement(blockStatement.Body) is { } lastStatement && DefinitelyReturns(lastStatement),
 			IfStmt ifStatement => ifStatement.HasElse && BodyDefinitelyReturns(ifStatement.ThenBody) && BodyDefinitelyReturns(ifStatement.ElseBody),
-			_ => false
+			_ => false,
 		};
 
 		private static bool BodyDefinitelyReturns(List<Stmt> body) => LastMeaningfulStatement(body) is { } lastStatement && DefinitelyReturns(lastStatement);
@@ -947,12 +1054,12 @@ internal static class GS2Compiler
 				if (!discardCallReturn) { }
 				else if (exprStatement.Expression is CallExpr call && NonReturningBuiltInCalls.Contains(call.Name)) { }
 				else if (exprStatement.Expression is MethodCallExpr methodCall && NonReturningMethodCalls.Contains(methodCall.Name)) { }
-				else if (exprStatement.Expression is CallExpr or MethodCallExpr or DynamicMethodCallExpr) _bytecode.Emit(Op.IndexDec);
+				else if (exprStatement.Expression is CallExpr or MethodCallExpr or DynamicMethodCallExpr) bytecode.Emit(Op.IndexDec);
 			}
 			else if (statement is ReturnStmt returnStatement)
 			{
 				Emit(returnStatement.Expression);
-				_bytecode.Emit(Op.Ret);
+				bytecode.Emit(Op.Ret);
 			}
 			else if (statement is IfStmt ifStatement) EmitIf(ifStatement);
 			else if (statement is ForStmt forStatement) EmitFor(forStatement);
@@ -977,27 +1084,27 @@ internal static class GS2Compiler
 			else Emit(statement.Condition, false, false, 0, true);
 			_conditionSuccessPatches.Pop();
 			_conditionFailPatches.Pop();
-			if (!IsBooleanExpr(statement.Condition) && NeedsNumericConversion(statement.Condition)) _bytecode.Emit(Op.ConvToFloat);
-			foreach (var patch in conditionSuccessPatches) _bytecode.PatchShort(patch, _bytecode.OpIndex);
-			_bytecode.Emit(Op.If);
-			var failLoc = _bytecode.EmitNumberOperandPlaceholder();
+			if (!IsBooleanExpr(statement.Condition) && NeedsNumericConversion(statement.Condition)) bytecode.Emit(Op.ConvToFloat);
+			foreach (var patch in conditionSuccessPatches) bytecode.PatchShort(patch, bytecode.OpIndex);
+			bytecode.Emit(Op.If);
+			var failLoc = bytecode.EmitNumberOperandPlaceholder();
 			foreach (var stmt in statement.ThenBody) EmitStatement(stmt);
-			var failTarget = _bytecode.OpIndex + (statement.HasElse ? 1 : 0);
-			_bytecode.PatchShort(failLoc, failTarget);
-			foreach (var patch in conditionFailPatches) _bytecode.PatchShort(patch, failTarget);
+			var failTarget = bytecode.OpIndex + (statement.HasElse ? 1 : 0);
+			bytecode.PatchShort(failLoc, failTarget);
+			foreach (var patch in conditionFailPatches) bytecode.PatchShort(patch, failTarget);
 			if (statement.HasElse)
 			{
-				_bytecode.Emit(Op.SetIndex);
-				var exitLoc = _bytecode.EmitNumberOperandPlaceholder();
+				bytecode.Emit(Op.SetIndex);
+				var exitLoc = bytecode.EmitNumberOperandPlaceholder();
 				foreach (var stmt in statement.ElseBody) EmitStatement(stmt);
-				_bytecode.PatchShort(exitLoc, _bytecode.OpIndex);
+				bytecode.PatchShort(exitLoc, bytecode.OpIndex);
 			}
 		}
 
 		private void EmitFor(ForStmt statement)
 		{
 			if (statement.Init != null) EmitUnusedExpression(statement.Init);
-			var start = _bytecode.OpIndex;
+			var start = bytecode.OpIndex;
 			List<int> conditionFailPatches = [];
 			List<int> conditionSuccessPatches = [];
 			_conditionFailPatches.Push(conditionFailPatches);
@@ -1006,57 +1113,57 @@ internal static class GS2Compiler
 			else Emit(statement.Condition, false, false, 0, true);
 			_conditionSuccessPatches.Pop();
 			_conditionFailPatches.Pop();
-			if (!IsBooleanExpr(statement.Condition) && NeedsNumericConversion(statement.Condition)) _bytecode.Emit(Op.ConvToFloat);
-			foreach (var patch in conditionSuccessPatches) _bytecode.PatchShort(patch, _bytecode.OpIndex);
-			_bytecode.Emit(Op.If);
-			var breakLoc = _bytecode.EmitNumberOperandPlaceholder();
+			if (!IsBooleanExpr(statement.Condition) && NeedsNumericConversion(statement.Condition)) bytecode.Emit(Op.ConvToFloat);
+			foreach (var patch in conditionSuccessPatches) bytecode.PatchShort(patch, bytecode.OpIndex);
+			bytecode.Emit(Op.If);
+			var breakLoc = bytecode.EmitNumberOperandPlaceholder();
 			List<int> breakPatches = [];
 			_breakPatches.Push(breakPatches);
 			List<int> continuePatches = [];
 			_continuePatches.Push(continuePatches);
-			_bytecode.Emit(Op.CmdCall);
+			bytecode.Emit(Op.CmdCall);
 			foreach (var stmt in statement.Body) EmitStatement(stmt);
-			foreach (var patch in continuePatches) _bytecode.PatchShort(patch, _bytecode.OpIndex);
+			foreach (var patch in continuePatches) bytecode.PatchShort(patch, bytecode.OpIndex);
 			if (statement.Post != null) EmitUnusedExpression(statement.Post);
-			_bytecode.Emit(Op.SetIndex);
-			_bytecode.EmitDynamicNumber(start);
+			bytecode.Emit(Op.SetIndex);
+			bytecode.EmitDynamicNumber(start);
 			_continuePatches.Pop();
 			_breakPatches.Pop();
-			_bytecode.PatchShort(breakLoc, _bytecode.OpIndex);
-			foreach (var patch in breakPatches) _bytecode.PatchShort(patch, _bytecode.OpIndex);
-			foreach (var patch in conditionFailPatches) _bytecode.PatchShort(patch, _bytecode.OpIndex);
+			bytecode.PatchShort(breakLoc, bytecode.OpIndex);
+			foreach (var patch in breakPatches) bytecode.PatchShort(patch, bytecode.OpIndex);
+			foreach (var patch in conditionFailPatches) bytecode.PatchShort(patch, bytecode.OpIndex);
 		}
 
 		private void EmitForEach(ForEachStmt statement)
 		{
 			Emit(statement.Name);
 			Emit(statement.Source);
-			_bytecode.Emit(Op.ConvToObject);
-			_bytecode.Emit(Op.TypeNumber);
-			_bytecode.EmitDynamicNumber(0);
-			var start = _bytecode.OpIndex;
-			_bytecode.Emit(Op.Foreach);
-			var breakLoc = _bytecode.EmitNumberOperandPlaceholder();
+			bytecode.Emit(Op.ConvToObject);
+			bytecode.Emit(Op.TypeNumber);
+			bytecode.EmitDynamicNumber(0);
+			var start = bytecode.OpIndex;
+			bytecode.Emit(Op.Foreach);
+			var breakLoc = bytecode.EmitNumberOperandPlaceholder();
 			List<int> breakPatches = [];
 			_breakPatches.Push(breakPatches);
 			List<int> continuePatches = [];
 			_continuePatches.Push(continuePatches);
-			_bytecode.Emit(Op.CmdCall);
+			bytecode.Emit(Op.CmdCall);
 			foreach (var stmt in statement.Body) EmitStatement(stmt);
-			foreach (var patch in continuePatches) _bytecode.PatchShort(patch, _bytecode.OpIndex);
-			_bytecode.Emit(Op.Inc);
-			_bytecode.Emit(Op.SetIndex);
-			_bytecode.EmitDynamicNumber(start);
+			foreach (var patch in continuePatches) bytecode.PatchShort(patch, bytecode.OpIndex);
+			bytecode.Emit(Op.Inc);
+			bytecode.Emit(Op.SetIndex);
+			bytecode.EmitDynamicNumber(start);
 			_continuePatches.Pop();
 			_breakPatches.Pop();
-			_bytecode.PatchShort(breakLoc, _bytecode.OpIndex);
-			foreach (var patch in breakPatches) _bytecode.PatchShort(patch, _bytecode.OpIndex);
-			_bytecode.Emit(Op.IndexDec);
+			bytecode.PatchShort(breakLoc, bytecode.OpIndex);
+			foreach (var patch in breakPatches) bytecode.PatchShort(patch, bytecode.OpIndex);
+			bytecode.Emit(Op.IndexDec);
 		}
 
 		private void EmitWhile(WhileStmt statement)
 		{
-			var start = _bytecode.OpIndex;
+			var start = bytecode.OpIndex;
 			List<int> conditionFailPatches = [];
 			List<int> conditionSuccessPatches = [];
 			_conditionFailPatches.Push(conditionFailPatches);
@@ -1064,56 +1171,56 @@ internal static class GS2Compiler
 			Emit(statement.Condition, false, false, 0, true);
 			_conditionSuccessPatches.Pop();
 			_conditionFailPatches.Pop();
-			if (!IsBooleanExpr(statement.Condition) && NeedsNumericConversion(statement.Condition)) _bytecode.Emit(Op.ConvToFloat);
-			foreach (var patch in conditionSuccessPatches) _bytecode.PatchShort(patch, _bytecode.OpIndex);
+			if (!IsBooleanExpr(statement.Condition) && NeedsNumericConversion(statement.Condition)) bytecode.Emit(Op.ConvToFloat);
+			foreach (var patch in conditionSuccessPatches) bytecode.PatchShort(patch, bytecode.OpIndex);
 			List<int> breakPatches = [];
 			_breakPatches.Push(breakPatches);
 			List<int> continuePatches = [];
 			_continuePatches.Push(continuePatches);
-			_bytecode.Emit(Op.If);
-			var breakLoc = _bytecode.EmitNumberOperandPlaceholder();
+			bytecode.Emit(Op.If);
+			var breakLoc = bytecode.EmitNumberOperandPlaceholder();
 			breakPatches.Add(breakLoc);
-			_bytecode.Emit(Op.CmdCall);
+			bytecode.Emit(Op.CmdCall);
 			foreach (var stmt in statement.Body) EmitStatement(stmt);
-			foreach (var patch in continuePatches) _bytecode.PatchShort(patch, _bytecode.OpIndex);
-			_bytecode.Emit(Op.SetIndex);
-			_bytecode.EmitNumberOperand(start);
+			foreach (var patch in continuePatches) bytecode.PatchShort(patch, bytecode.OpIndex);
+			bytecode.Emit(Op.SetIndex);
+			bytecode.EmitNumberOperand(start);
 			_continuePatches.Pop();
 			_breakPatches.Pop();
-			foreach (var patch in breakPatches) _bytecode.PatchShort(patch, _bytecode.OpIndex);
-			foreach (var patch in conditionFailPatches) _bytecode.PatchShort(patch, _bytecode.OpIndex);
+			foreach (var patch in breakPatches) bytecode.PatchShort(patch, bytecode.OpIndex);
+			foreach (var patch in conditionFailPatches) bytecode.PatchShort(patch, bytecode.OpIndex);
 		}
 
 		private void EmitWith(WithStmt statement)
 		{
 			Emit(statement.Target);
-			_bytecode.Emit(Op.ConvToObject);
-			_bytecode.Emit(Op.With);
-			var exitLoc = _bytecode.EmitNumberOperandPlaceholder();
+			bytecode.Emit(Op.ConvToObject);
+			bytecode.Emit(Op.With);
+			var exitLoc = bytecode.EmitNumberOperandPlaceholder();
 			foreach (var stmt in statement.Body) EmitStatement(stmt);
-			_bytecode.Emit(Op.WithEnd);
-			_bytecode.PatchShort(exitLoc, _bytecode.OpIndex);
+			bytecode.Emit(Op.WithEnd);
+			bytecode.PatchShort(exitLoc, bytecode.OpIndex);
 		}
 
 		private void EmitSwitch(SwitchStmt statement)
 		{
-			_bytecode.Emit(Op.SetIndex);
-			var caseTestLoc = _bytecode.EmitNumberOperandPlaceholder();
+			bytecode.Emit(Op.SetIndex);
+			var caseTestLoc = bytecode.EmitNumberOperandPlaceholder();
 			List<int> caseStarts = [];
 			List<int> breakPatches = [];
 			_breakPatches.Push(breakPatches);
 			foreach (var switchCase in statement.Cases)
 			{
-				var start = _bytecode.OpIndex;
+				var start = bytecode.OpIndex;
 				foreach (var _ in switchCase.Labels) caseStarts.Add(start);
 				List<int> continuePatches = [];
 				_continuePatches.Push(continuePatches);
 				foreach (var stmt in switchCase.Body) EmitStatement(stmt);
 				_continuePatches.Pop();
-				foreach (var patch in continuePatches) _bytecode.PatchShort(patch, start);
+				foreach (var patch in continuePatches) bytecode.PatchShort(patch, start);
 			}
 			_breakPatches.Pop();
-			_bytecode.PatchShort(caseTestLoc, _bytecode.OpIndex);
+			bytecode.PatchShort(caseTestLoc, bytecode.OpIndex);
 			Emit(statement.Expression);
 			var caseIndex = 0;
 			foreach (var switchCase in statement.Cases)
@@ -1121,59 +1228,59 @@ internal static class GS2Compiler
 			{
 				if (label != null)
 				{
-					_bytecode.Emit(Op.CopyLastOp);
+					bytecode.Emit(Op.CopyLastOp);
 					Emit(label);
-					_bytecode.Emit(Op.Eq);
-					_bytecode.Emit(Op.SetIndexTrue);
+					bytecode.Emit(Op.Eq);
+					bytecode.Emit(Op.SetIndexTrue);
 				}
-				else _bytecode.Emit(Op.SetIndex);
-				_bytecode.EmitDynamicNumber(caseStarts[caseIndex++]);
+				else bytecode.Emit(Op.SetIndex);
+				bytecode.EmitDynamicNumber(caseStarts[caseIndex++]);
 			}
-			foreach (var patch in breakPatches) _bytecode.PatchShort(patch, _bytecode.OpIndex);
-			_bytecode.Emit(Op.IndexDec);
+			foreach (var patch in breakPatches) bytecode.PatchShort(patch, bytecode.OpIndex);
+			bytecode.Emit(Op.IndexDec);
 		}
 
 		private void EmitBreak()
 		{
 			if (_breakPatches.Count == 0) return;
-			_bytecode.Emit(Op.SetIndex);
-			_breakPatches.Peek().Add(_bytecode.EmitNumberOperandPlaceholder());
+			bytecode.Emit(Op.SetIndex);
+			_breakPatches.Peek().Add(bytecode.EmitNumberOperandPlaceholder());
 		}
 
 		private void EmitContinue()
 		{
 			if (_continuePatches.Count == 0) return;
-			_bytecode.Emit(Op.SetIndex);
-			_continuePatches.Peek().Add(_bytecode.EmitNumberOperandPlaceholder());
+			bytecode.Emit(Op.SetIndex);
+			_continuePatches.Peek().Add(bytecode.EmitNumberOperandPlaceholder());
 		}
 
 		private void EmitNewStatement(NewStmt statement)
 		{
 			foreach (var arg in statement.Args) Emit(arg);
-			_bytecode.Emit(Op.InlineNew);
-			_bytecode.Emit(Op.CopyLastOp);
-			_bytecode.Emit(Op.CopyLastOp);
-			_bytecode.Emit(Op.CopyLastOp);
-			_bytecode.Emit(Op.TypeString);
-			_bytecode.EmitDynamicStringIndex(_bytecode.GetString(statement.TypeName));
-			_bytecode.Emit(Op.ConvToString);
-			_bytecode.Emit(Op.NewObject);
-			_bytecode.Emit(Op.Assign);
-			_bytecode.Emit(Op.ConvToObject);
-			_bytecode.Emit(Op.With);
-			var withLoc = _bytecode.EmitNumberOperandPlaceholder();
+			bytecode.Emit(Op.InlineNew);
+			bytecode.Emit(Op.CopyLastOp);
+			bytecode.Emit(Op.CopyLastOp);
+			bytecode.Emit(Op.CopyLastOp);
+			bytecode.Emit(Op.TypeString);
+			bytecode.EmitDynamicStringIndex(bytecode.GetString(statement.TypeName));
+			bytecode.Emit(Op.ConvToString);
+			bytecode.Emit(Op.NewObject);
+			bytecode.Emit(Op.Assign);
+			bytecode.Emit(Op.ConvToObject);
+			bytecode.Emit(Op.With);
+			var withLoc = bytecode.EmitNumberOperandPlaceholder();
 			var previousCount = _newObjectCount++;
 			foreach (var stmt in statement.Body) EmitStatement(stmt);
-			_bytecode.Emit(Op.WithEnd);
-			_bytecode.PatchShort(withLoc, _bytecode.OpIndex);
+			bytecode.Emit(Op.WithEnd);
+			bytecode.PatchShort(withLoc, bytecode.OpIndex);
 			for (var i = 0; i < _newObjectCount - previousCount; ++i)
 			{
-				_bytecode.Emit(Op.TypeArray);
-				_bytecode.Emit(Op.SwapLastOps);
-				_bytecode.Emit(Op.TypeVar);
-				_bytecode.EmitDynamicStringIndex(_bytecode.GetString("addcontrol"));
-				_bytecode.Emit(Op.Call);
-				_bytecode.Emit(Op.IndexDec);
+				bytecode.Emit(Op.TypeArray);
+				bytecode.Emit(Op.SwapLastOps);
+				bytecode.Emit(Op.TypeVar);
+				bytecode.EmitDynamicStringIndex(bytecode.GetString("addcontrol"));
+				bytecode.Emit(Op.Call);
+				bytecode.Emit(Op.IndexDec);
 			}
 			_newObjectCount--;
 		}
@@ -1184,54 +1291,54 @@ internal static class GS2Compiler
 			{
 				case BinaryExpr { Op: "=", Left: MultiArrayIndexExpr left, Right: var right }:
 					EmitMultiArrayIndex(left, true);
-					if (copyAssignmentTarget) _bytecode.Emit(Op.CopyLastOp);
+					if (copyAssignmentTarget) bytecode.Emit(Op.CopyLastOp);
 					if (right is BinaryExpr { Op: "=" }) Emit(right, true, true, 0);
 					else Emit(right);
-					_bytecode.Emit(Op.ArrayMultiDimAssign);
+					bytecode.Emit(Op.ArrayMultiDimAssign);
 					break;
 				case BinaryExpr { Op: "=", Left: ArrayIndexExpr left, Right: var right }:
 					EmitArrayIndex(left, true);
-					if (copyAssignmentTarget) _bytecode.Emit(Op.CopyLastOp);
+					if (copyAssignmentTarget) bytecode.Emit(Op.CopyLastOp);
 					if (right is BinaryExpr { Op: "=" }) Emit(right, true, true, 0);
 					else Emit(right);
-					_bytecode.Emit(Op.ArrayAssign);
+					bytecode.Emit(Op.ArrayAssign);
 					break;
 				case BinaryExpr { Op: "=", Left: var left, Right: var right }:
 					Emit(left);
-					if (copyAssignmentTarget) _bytecode.Emit(Op.CopyLastOp);
+					if (copyAssignmentTarget) bytecode.Emit(Op.CopyLastOp);
 					if (right is BinaryExpr { Op: "=" }) Emit(right, true, true, 0);
 					else Emit(right);
-					_bytecode.Emit(Op.Assign);
+					bytecode.Emit(Op.Assign);
 					break;
 				case BinaryExpr { Op: var op, Left: MultiArrayIndexExpr left, Right: var right } when IsCompoundAssign(op):
 					EmitMultiArrayIndex(left, true);
-					_bytecode.Emit(Op.CopyLastOp);
-					_bytecode.Emit(op == "@=" ? Op.ConvToString : Op.ConvToFloat);
+					bytecode.Emit(Op.CopyLastOp);
+					bytecode.Emit(op == "@=" ? Op.ConvToString : Op.ConvToFloat);
 					Emit(right);
-					if (op == "@=" && NeedsStringConversion(right)) _bytecode.Emit(Op.ConvToString);
-					else if (op != "@=" && NeedsNumericConversion(right)) _bytecode.Emit(Op.ConvToFloat);
-					_bytecode.Emit(CompoundOpcode(op));
-					_bytecode.Emit(Op.ArrayMultiDimAssign);
+					if (op == "@=" && NeedsStringConversion(right)) bytecode.Emit(Op.ConvToString);
+					else if (op != "@=" && NeedsNumericConversion(right)) bytecode.Emit(Op.ConvToFloat);
+					bytecode.Emit(CompoundOpcode(op));
+					bytecode.Emit(Op.ArrayMultiDimAssign);
 					break;
 				case BinaryExpr { Op: var op, Left: ArrayIndexExpr left, Right: var right } when IsCompoundAssign(op):
 					EmitArrayIndex(left, true);
-					_bytecode.Emit(Op.CopyLastOp);
-					_bytecode.Emit(op == "@=" ? Op.ConvToString : Op.ConvToFloat);
+					bytecode.Emit(Op.CopyLastOp);
+					bytecode.Emit(op == "@=" ? Op.ConvToString : Op.ConvToFloat);
 					Emit(right);
-					if (op == "@=" && NeedsStringConversion(right)) _bytecode.Emit(Op.ConvToString);
-					else if (op != "@=" && NeedsNumericConversion(right)) _bytecode.Emit(Op.ConvToFloat);
-					_bytecode.Emit(CompoundOpcode(op));
-					_bytecode.Emit(Op.ArrayAssign);
+					if (op == "@=" && NeedsStringConversion(right)) bytecode.Emit(Op.ConvToString);
+					else if (op != "@=" && NeedsNumericConversion(right)) bytecode.Emit(Op.ConvToFloat);
+					bytecode.Emit(CompoundOpcode(op));
+					bytecode.Emit(Op.ArrayAssign);
 					break;
 				case BinaryExpr { Op: var op, Left: var left, Right: var right } when IsCompoundAssign(op):
 					Emit(left);
-					_bytecode.Emit(Op.CopyLastOp);
-					_bytecode.Emit(op == "@=" ? Op.ConvToString : Op.ConvToFloat);
+					bytecode.Emit(Op.CopyLastOp);
+					bytecode.Emit(op == "@=" ? Op.ConvToString : Op.ConvToFloat);
 					Emit(right);
-					if (op == "@=" && NeedsStringConversion(right)) _bytecode.Emit(Op.ConvToString);
-					else if (op != "@=" && NeedsNumericConversion(right)) _bytecode.Emit(Op.ConvToFloat);
-					_bytecode.Emit(CompoundOpcode(op));
-					_bytecode.Emit(Op.Assign);
+					if (op == "@=" && NeedsStringConversion(right)) bytecode.Emit(Op.ConvToString);
+					else if (op != "@=" && NeedsNumericConversion(right)) bytecode.Emit(Op.ConvToFloat);
+					bytecode.Emit(CompoundOpcode(op));
+					bytecode.Emit(Op.Assign);
 					break;
 				case BinaryExpr { Op: "&&" or "||" } logical:
 					if (!controlLogical && !negatedLogical && !leftNegatedControlAnd && HasNestedLogical(logical, logical.Op))
@@ -1256,135 +1363,135 @@ internal static class GS2Compiler
 					var passNegatedControlAnd = controlLogical && logical.Left is UnaryExpr { Op: "!", Expression: BinaryExpr { Op: "&&" } };
 					var leftPatchOffset = logical.Left is BinaryExpr { Op: "&&" or "||" } ? (controlLogical || negatedLogical) && logical.Op == "||" ? 6 : logical.Op == "&&" && logical.Left is BinaryExpr { Op: "||" } ? 0 : 1 : 0;
 					Emit(logical.Left, false, false, leftPatchOffset, controlLogical, negatedLogical, true, passNegatedControlAnd);
-					if (!IsBooleanExpr(logical.Left)) _bytecode.Emit(Op.ConvToFloat);
+					if (!IsBooleanExpr(logical.Left)) bytecode.Emit(Op.ConvToFloat);
 					if (localSuccessPatches != null)
 					{
-						for (var i = localSuccessStart; i < localSuccessPatches.Count; ++i) _bytecode.PatchShort(localSuccessPatches[i], _bytecode.OpIndex);
+						for (var i = localSuccessStart; i < localSuccessPatches.Count; ++i) bytecode.PatchShort(localSuccessPatches[i], bytecode.OpIndex);
 						localSuccessPatches.RemoveRange(localSuccessStart, localSuccessPatches.Count - localSuccessStart);
 					}
 					if (localFailPatches != null)
 					{
-						for (var i = localFailStart; i < localFailPatches.Count; ++i) _bytecode.PatchShort(localFailPatches[i], _bytecode.OpIndex + 1);
+						for (var i = localFailStart; i < localFailPatches.Count; ++i) bytecode.PatchShort(localFailPatches[i], bytecode.OpIndex + 1);
 						localFailPatches.RemoveRange(localFailStart, localFailPatches.Count - localFailStart);
 					}
-					_bytecode.Emit(logical.Op == "&&" && controlLogical ? Op.If : logical.Op == "&&" ? Op.And : Op.Or);
-					var loc = _bytecode.EmitNumberOperandPlaceholder();
+					bytecode.Emit(logical.Op == "&&" && controlLogical ? Op.If : logical.Op == "&&" ? Op.And : Op.Or);
+					var loc = bytecode.EmitNumberOperandPlaceholder();
 					Emit(logical.Right, false, false, 0, controlLogical, negatedLogical);
-					if (!IsBooleanExpr(logical.Right)) _bytecode.Emit(Op.ConvToFloat);
-					if (logicalInline) _bytecode.Emit(Op.InlineConditional);
+					if (!IsBooleanExpr(logical.Right)) bytecode.Emit(Op.ConvToFloat);
+					if (logicalInline) bytecode.Emit(Op.InlineConditional);
 					if (logical.Op == "&&" && controlLogical && _conditionFailPatches.Count > 0) _conditionFailPatches.Peek().Add(loc);
 					else if (logical.Op == "||" && controlLogical && _conditionSuccessPatches.Count > 0) _conditionSuccessPatches.Peek().Add(loc);
-					else _bytecode.PatchShort(loc, _bytecode.OpIndex - (logicalInline ? 1 : 0) + (!logicalInline ? suppressedLogicalPatchOffset : 0));
+					else bytecode.PatchShort(loc, bytecode.OpIndex - (logicalInline ? 1 : 0) + (!logicalInline ? suppressedLogicalPatchOffset : 0));
 					break;
 				case TernaryExpr ternary:
 					EmitTernary(ternary);
 					break;
 				case BinaryExpr { Op: "@", Left: var left, Right: var right } when _dynamicMethodName:
 					Emit(left);
-					if (left is StringExpr || NeedsStringConversion(left)) _bytecode.Emit(Op.ConvToString);
+					if (left is StringExpr || NeedsStringConversion(left)) bytecode.Emit(Op.ConvToString);
 					Emit(right);
-					if (right is not StringExpr) _bytecode.Emit(Op.ConvToString);
-					_bytecode.Emit(Op.Join);
+					if (right is not StringExpr) bytecode.Emit(Op.ConvToString);
+					bytecode.Emit(Op.Join);
 					break;
 				case BinaryExpr { Op: " " or "\n" or "\t", Left: var left, Right: var right } spacedConcat:
 					Emit(left);
-					if (NeedsStringConversion(left)) _bytecode.Emit(Op.ConvToString);
-					_bytecode.Emit(Op.TypeString);
-					_bytecode.EmitDynamicStringIndex(_bytecode.GetString(spacedConcat.Op));
-					_bytecode.Emit(Op.Join);
+					if (NeedsStringConversion(left)) bytecode.Emit(Op.ConvToString);
+					bytecode.Emit(Op.TypeString);
+					bytecode.EmitDynamicStringIndex(bytecode.GetString(spacedConcat.Op));
+					bytecode.Emit(Op.Join);
 					Emit(right);
-					if (NeedsStringConversion(right)) _bytecode.Emit(Op.ConvToString);
-					_bytecode.Emit(Op.Join);
+					if (NeedsStringConversion(right)) bytecode.Emit(Op.ConvToString);
+					bytecode.Emit(Op.Join);
 					break;
 				case InExpr inExpr:
 					Emit(inExpr.Expression);
 					Emit(inExpr.Lower);
 					if (inExpr.Upper != null)
 					{
-						if (!IsNumberExpr(inExpr.Lower)) _bytecode.Emit(Op.ConvToFloat);
+						if (!IsNumberExpr(inExpr.Lower)) bytecode.Emit(Op.ConvToFloat);
 						Emit(inExpr.Upper);
-						if (!IsNumberExpr(inExpr.Upper)) _bytecode.Emit(Op.ConvToFloat);
-						_bytecode.Emit(Op.InRange);
+						if (!IsNumberExpr(inExpr.Upper)) bytecode.Emit(Op.ConvToFloat);
+						bytecode.Emit(Op.InRange);
 					}
 					else
 					{
-						_bytecode.Emit(Op.ConvToObject);
-						_bytecode.Emit(Op.InObj);
+						bytecode.Emit(Op.ConvToObject);
+						bytecode.Emit(Op.InObj);
 					}
 					break;
 				case BinaryExpr { Op: "*", Left: UnaryExpr { Op: "-", Expression: var negatedLeft }, Right: var right }:
 					Emit(negatedLeft);
-					if (NeedsNumericConversion(negatedLeft)) _bytecode.Emit(Op.ConvToFloat);
+					if (NeedsNumericConversion(negatedLeft)) bytecode.Emit(Op.ConvToFloat);
 					Emit(right);
-					if (NeedsNumericConversion(right)) _bytecode.Emit(Op.ConvToFloat);
-					_bytecode.Emit(Op.Mul);
-					_bytecode.Emit(Op.UnarySub);
+					if (NeedsNumericConversion(right)) bytecode.Emit(Op.ConvToFloat);
+					bytecode.Emit(Op.Mul);
+					bytecode.Emit(Op.UnarySub);
 					break;
 				case BinaryExpr { Op: "==" or "!=", Left: StringCastExpr { Expression: MemberExpr left }, Right: StringCastExpr { Expression: MemberExpr right } } castCompare:
 					Emit(left);
 					Emit(right);
-					_bytecode.Emit(Op.ConvToString);
-					_bytecode.Emit(BinaryOpcode(castCompare.Op));
-					_bytecode.Emit(Op.ConvToString);
+					bytecode.Emit(Op.ConvToString);
+					bytecode.Emit(BinaryOpcode(castCompare.Op));
+					bytecode.Emit(Op.ConvToString);
 					break;
 				case BinaryExpr { Op: "==" or "!=", Left: StringCastExpr { Expression: MemberExpr left }, Right: StringCastExpr { Expression: ArrayLiteralExpr right } } arrayCastCompare:
 					Emit(left);
 					Emit(new StringCastExpr(right));
-					_bytecode.Emit(BinaryOpcode(arrayCastCompare.Op));
-					_bytecode.Emit(Op.ConvToString);
+					bytecode.Emit(BinaryOpcode(arrayCastCompare.Op));
+					bytecode.Emit(Op.ConvToString);
 					break;
 				case BinaryExpr { Op: "==" or "!=", Left: StringCastExpr { Expression: ArrayLiteralExpr left }, Right: StringCastExpr { Expression: ArrayLiteralExpr right } } arrayPairCastCompare:
 					Emit(left);
 					Emit(new StringCastExpr(right));
-					_bytecode.Emit(BinaryOpcode(arrayPairCastCompare.Op));
-					_bytecode.Emit(Op.ConvToString);
+					bytecode.Emit(BinaryOpcode(arrayPairCastCompare.Op));
+					bytecode.Emit(Op.ConvToString);
 					break;
 				case BinaryExpr binary:
 					Emit(binary.Left);
-					if (binary.Op == "@" && NeedsStringConversion(binary.Left)) _bytecode.Emit(Op.ConvToString);
-					if ((IsNumericOp(binary.Op) || IsComparisonOp(binary.Op)) && NeedsNumericConversion(binary.Left)) _bytecode.Emit(Op.ConvToFloat);
-					if (IsComparisonOp(binary.Op) && binary.Left is UnaryExpr { Op: "++" or "--", Postfix: true }) _bytecode.Emit(Op.ConvToFloat);
-					if (binary.Op == "%" && binary.Left is BinaryExpr { Op: "+=" or "-=" or "*=" or "/=" or "%=" }) _bytecode.Emit(Op.ConvToFloat);
-					if (binary.Op == "&" && binary.Left is not NumberExpr) _bytecode.Emit(Op.ConvToFloat);
-					if (binary.Op == "@" && binary.Left is StringCastExpr && binary.Right is TernaryExpr) _bytecode.Emit(Op.ConvToString);
-					if (IsNumericOp(binary.Op) && UsesPreviewSpriteTernary(binary.Left)) _bytecode.Emit(Op.ConvToFloat);
+					if (binary.Op == "@" && NeedsStringConversion(binary.Left)) bytecode.Emit(Op.ConvToString);
+					if ((IsNumericOp(binary.Op) || IsComparisonOp(binary.Op)) && NeedsNumericConversion(binary.Left)) bytecode.Emit(Op.ConvToFloat);
+					if (IsComparisonOp(binary.Op) && binary.Left is UnaryExpr { Op: "++" or "--", Postfix: true }) bytecode.Emit(Op.ConvToFloat);
+					if (binary.Op == "%" && binary.Left is BinaryExpr { Op: "+=" or "-=" or "*=" or "/=" or "%=" }) bytecode.Emit(Op.ConvToFloat);
+					if (binary.Op == "&" && binary.Left is not NumberExpr) bytecode.Emit(Op.ConvToFloat);
+					if (binary.Op == "@" && binary.Left is StringCastExpr && binary.Right is TernaryExpr) bytecode.Emit(Op.ConvToString);
+					if (IsNumericOp(binary.Op) && UsesPreviewSpriteTernary(binary.Left)) bytecode.Emit(Op.ConvToFloat);
 					Emit(binary.Right);
-					if ((IsNumericOp(binary.Op) || IsComparisonOp(binary.Op)) && NeedsNumericConversion(binary.Right)) _bytecode.Emit(Op.ConvToFloat);
-					if (IsNumericOp(binary.Op) && UsesSignTernary(binary.Right)) _bytecode.Emit(Op.ConvToFloat);
-					if (binary.Op == "@" && (_dynamicMethodName || NeedsStringConversion(binary.Right))) _bytecode.Emit(Op.ConvToString);
-					_bytecode.Emit(BinaryOpcode(binary.Op));
+					if ((IsNumericOp(binary.Op) || IsComparisonOp(binary.Op)) && NeedsNumericConversion(binary.Right)) bytecode.Emit(Op.ConvToFloat);
+					if (IsNumericOp(binary.Op) && UsesSignTernary(binary.Right)) bytecode.Emit(Op.ConvToFloat);
+					if (binary.Op == "@" && (_dynamicMethodName || NeedsStringConversion(binary.Right))) bytecode.Emit(Op.ConvToString);
+					bytecode.Emit(BinaryOpcode(binary.Op));
 					break;
 				case MemberExpr member:
 					Emit(member.Object);
-					if (NeedsObjectConversion(member.Object)) _bytecode.Emit(Op.ConvToObject);
-					_bytecode.Emit(Op.TypeVar);
-					_bytecode.EmitDynamicStringIndex(_bytecode.GetString(member.Name));
-					_bytecode.Emit(Op.MemberAccess);
+					if (NeedsObjectConversion(member.Object)) bytecode.Emit(Op.ConvToObject);
+					bytecode.Emit(Op.TypeVar);
+					bytecode.EmitDynamicStringIndex(bytecode.GetString(member.Name));
+					bytecode.Emit(Op.MemberAccess);
 					break;
 				case DynamicMemberExpr member:
 					Emit(member.Object);
-					if (NeedsObjectConversion(member.Object)) _bytecode.Emit(Op.ConvToObject);
+					if (NeedsObjectConversion(member.Object)) bytecode.Emit(Op.ConvToObject);
 					if (member.Name is StringCastExpr { Expression: IdentifierExpr or MemberExpr { Object: IdentifierExpr { Name: "temp" } } } nameCast)
 					{
 						Emit(nameCast.Expression);
-						if (NeedsNumericConversion(nameCast.Expression)) _bytecode.Emit(Op.ConvToFloat);
-						_bytecode.Emit(Op.Add);
+						if (NeedsNumericConversion(nameCast.Expression)) bytecode.Emit(Op.ConvToFloat);
+						bytecode.Emit(Op.Add);
 					}
 					else
 					{
 						Emit(member.Name);
-						if (NeedsStringConversion(member.Name)) _bytecode.Emit(Op.ConvToString);
+						if (NeedsStringConversion(member.Name)) bytecode.Emit(Op.ConvToString);
 					}
-					_bytecode.Emit(Op.MemberAccess);
+					bytecode.Emit(Op.MemberAccess);
 					break;
 				case StringCastExpr { Expression: IdentifierExpr id } when _tempAliases.TryPeek(out var tempAliases) && tempAliases.Contains(id.Name):
 					Emit(new MemberExpr(new IdentifierExpr("temp"), id.Name));
-					_bytecode.Emit(Op.ConvToString);
+					bytecode.Emit(Op.ConvToString);
 					break;
 				case StringCastExpr cast:
 					Emit(cast.Expression);
-					_bytecode.Emit(Op.ConvToString);
-					if (ExpressionTypeOf(cast.Expression) == ExprType.Array) _bytecode.Emit(Op.MemberAccess);
+					bytecode.Emit(Op.ConvToString);
+					if (ExpressionTypeOf(cast.Expression) == ExprType.Array) bytecode.Emit(Op.MemberAccess);
 					break;
 				case ArrayIndexExpr index:
 					EmitArrayIndex(index, false);
@@ -1395,415 +1502,415 @@ internal static class GS2Compiler
 				case DynamicVarExpr dynamicVar:
 					Emit(new CallExpr("makevar", [dynamicVar.Name]));
 					break;
-				case IdentifierExpr id when _constants.TryGetValue(id.Name, out var constant):
+				case IdentifierExpr id when constants.TryGetValue(id.Name, out var constant):
 					Emit(constant);
 					break;
 				case IdentifierExpr { Name: "this" }:
-					_bytecode.Emit(Op.This);
+					bytecode.Emit(Op.This);
 					break;
 				case IdentifierExpr { Name: "temp" }:
-					_bytecode.Emit(Op.Temp);
+					bytecode.Emit(Op.Temp);
 					break;
 				case IdentifierExpr { Name: "thiso" }:
-					_bytecode.Emit(Op.Thiso);
+					bytecode.Emit(Op.Thiso);
 					break;
 				case IdentifierExpr { Name: "player" }:
-					_bytecode.Emit(Op.Player);
+					bytecode.Emit(Op.Player);
 					break;
 				case IdentifierExpr { Name: "playero" }:
-					_bytecode.Emit(Op.Playero);
+					bytecode.Emit(Op.Playero);
 					break;
 				case IdentifierExpr { Name: "level" }:
-					_bytecode.Emit(Op.Level);
+					bytecode.Emit(Op.Level);
 					break;
 				case IdentifierExpr { Name: "pi" }:
-					_bytecode.Emit(Op.Pi);
+					bytecode.Emit(Op.Pi);
 					break;
 				case IdentifierExpr id:
-					_bytecode.Emit(Op.TypeVar);
-					_bytecode.EmitDynamicStringIndex(_bytecode.GetString(id.Name));
+					bytecode.Emit(Op.TypeVar);
+					bytecode.EmitDynamicStringIndex(bytecode.GetString(id.Name));
 					break;
 				case EnumExpr enumExpr:
-					_bytecode.Emit(Op.TypeNumber);
-					_bytecode.EmitDynamicNumber(_enums.TryGetValue(enumExpr.EnumName, out var members) && members.TryGetValue(enumExpr.MemberName, out var value) ? value : 0);
+					bytecode.Emit(Op.TypeNumber);
+					bytecode.EmitDynamicNumber(enums.TryGetValue(enumExpr.EnumName, out var members) && members.TryGetValue(enumExpr.MemberName, out var value) ? value : 0);
 					break;
 				case NumberExpr number:
-					_bytecode.Emit(Op.TypeNumber);
-					if (number.Text.Contains('.', StringComparison.Ordinal)) _bytecode.EmitDoubleNumber(CurrentFloatText(number.Text));
-					else _bytecode.EmitDynamicNumber(int.Parse(number.Text, CultureInfo.InvariantCulture));
+					bytecode.Emit(Op.TypeNumber);
+					if (number.Text.Contains('.', StringComparison.Ordinal)) bytecode.EmitDoubleNumber(CurrentFloatText(number.Text));
+					else bytecode.EmitDynamicNumber(int.Parse(number.Text, CultureInfo.InvariantCulture));
 					break;
 				case StringExpr str:
-					_bytecode.Emit(Op.TypeString);
-					_bytecode.EmitDynamicStringIndex(_bytecode.GetString(str.Value));
+					bytecode.Emit(Op.TypeString);
+					bytecode.EmitDynamicStringIndex(bytecode.GetString(str.Value));
 					break;
 				case BoolExpr boolean:
-					_bytecode.Emit(boolean.Value ? Op.TypeTrue : Op.TypeFalse);
+					bytecode.Emit(boolean.Value ? Op.TypeTrue : Op.TypeFalse);
 					break;
 				case NullExpr:
-					_bytecode.Emit(Op.TypeNull);
+					bytecode.Emit(Op.TypeNull);
 					break;
 				case UnaryExpr { Op: "-", Expression: NumberExpr number }:
-					_bytecode.Emit(Op.TypeNumber);
-					if (number.Text.Contains('.', StringComparison.Ordinal)) _bytecode.EmitDoubleNumber(NextNegativeFloatText(number.Text));
-					else _bytecode.EmitDynamicNumber(-int.Parse(number.Text, CultureInfo.InvariantCulture));
+					bytecode.Emit(Op.TypeNumber);
+					if (number.Text.Contains('.', StringComparison.Ordinal)) bytecode.EmitDoubleNumber(NextNegativeFloatText(number.Text));
+					else bytecode.EmitDynamicNumber(-int.Parse(number.Text, CultureInfo.InvariantCulture));
 					break;
 				case UnaryExpr { Op: "-", Expression: var unaryValue }:
 					Emit(unaryValue);
-					_bytecode.Emit(Op.ConvToFloat);
-					_bytecode.Emit(Op.UnarySub);
+					bytecode.Emit(Op.ConvToFloat);
+					bytecode.Emit(Op.UnarySub);
 					break;
 				case UnaryExpr { Op: "!", Expression: var notValue }:
 					Emit(notValue, false, false, 0, leftNegatedControlAnd, true);
-					if (!IsBooleanExpr(notValue)) _bytecode.Emit(Op.ConvToFloat);
-					_bytecode.Emit(Op.Not);
+					if (!IsBooleanExpr(notValue)) bytecode.Emit(Op.ConvToFloat);
+					bytecode.Emit(Op.Not);
 					break;
 				case UnaryExpr { Op: "~", Expression: var invertValue }:
 					Emit(invertValue);
-					if (!IsNumberExpr(invertValue)) _bytecode.Emit(Op.ConvToFloat);
-					_bytecode.Emit(Op.BitInvert);
+					if (!IsNumberExpr(invertValue)) bytecode.Emit(Op.ConvToFloat);
+					bytecode.Emit(Op.BitInvert);
 					break;
 				case UnaryExpr { Op: "++", Expression: var incValue, Postfix: true }:
 					Emit(incValue);
 					if (preservePostfixValue)
 					{
-						_bytecode.Emit(Op.CopyLastOp);
-						_bytecode.Emit(Op.ConvToFloat);
-						_bytecode.Emit(Op.SwapLastOps);
+						bytecode.Emit(Op.CopyLastOp);
+						bytecode.Emit(Op.ConvToFloat);
+						bytecode.Emit(Op.SwapLastOps);
 					}
-					_bytecode.Emit(Op.Inc);
-					_bytecode.Emit(Op.IndexDec);
+					bytecode.Emit(Op.Inc);
+					bytecode.Emit(Op.IndexDec);
 					break;
 				case UnaryExpr { Op: "--", Expression: var decValue, Postfix: true }:
 					Emit(decValue);
 					if (preservePostfixValue)
 					{
-						_bytecode.Emit(Op.CopyLastOp);
-						_bytecode.Emit(Op.ConvToFloat);
-						_bytecode.Emit(Op.SwapLastOps);
+						bytecode.Emit(Op.CopyLastOp);
+						bytecode.Emit(Op.ConvToFloat);
+						bytecode.Emit(Op.SwapLastOps);
 					}
-					_bytecode.Emit(Op.Dec);
-					_bytecode.Emit(Op.IndexDec);
+					bytecode.Emit(Op.Dec);
+					bytecode.Emit(Op.IndexDec);
 					break;
 				case UnaryExpr { Op: "++", Expression: var incValue }:
 					Emit(incValue);
-					_bytecode.Emit(Op.Inc);
-					if (!preservePostfixValue) _bytecode.Emit(Op.IndexDec);
+					bytecode.Emit(Op.Inc);
+					if (!preservePostfixValue) bytecode.Emit(Op.IndexDec);
 					break;
 				case UnaryExpr { Op: "--", Expression: var decValue }:
 					Emit(decValue);
-					_bytecode.Emit(Op.Dec);
-					if (!preservePostfixValue) _bytecode.Emit(Op.IndexDec);
+					bytecode.Emit(Op.Dec);
+					if (!preservePostfixValue) bytecode.Emit(Op.IndexDec);
 					break;
 				case CastExpr { Type: "int", Expression: var castValue }:
 					Emit(castValue);
-					if (!IsNumberExpr(castValue)) _bytecode.Emit(Op.ConvToFloat);
-					_bytecode.Emit(Op.Int);
+					if (!IsNumberExpr(castValue)) bytecode.Emit(Op.ConvToFloat);
+					bytecode.Emit(Op.Int);
 					break;
 				case CastExpr { Type: "float", Expression: var castValue }:
 					Emit(castValue);
-					if (!IsNumberExpr(castValue)) _bytecode.Emit(Op.ConvToFloat);
+					if (!IsNumberExpr(castValue)) bytecode.Emit(Op.ConvToFloat);
 					break;
 				case CastExpr { Type: "_", Expression: var castValue }:
 					Emit(castValue);
-					if (castValue is not StringExpr) _bytecode.Emit(Op.ConvToString);
-					_bytecode.Emit(Op.Translate);
+					if (castValue is not StringExpr) bytecode.Emit(Op.ConvToString);
+					bytecode.Emit(Op.Translate);
 					break;
 				case CallExpr call when BuiltInCalls.TryGetValue(call.Name, out var builtIn):
 					for (var i = call.Args.Count - 1; i >= 0; --i)
 					{
 						Emit(call.Args[i]);
-						if (!IsNumberExpr(call.Args[i])) _bytecode.Emit(Op.ConvToFloat);
+						if (!IsNumberExpr(call.Args[i])) bytecode.Emit(Op.ConvToFloat);
 					}
-					_bytecode.Emit(builtIn);
+					bytecode.Emit(builtIn);
 					break;
 				case CallExpr call when NonReversedBuiltInCalls.TryGetValue(call.Name, out var builtIn):
 					for (var i = 0; i < call.Args.Count; ++i)
 					{
 						Emit(call.Args[i]);
-						if (!IsNumberExpr(call.Args[i])) _bytecode.Emit(Op.ConvToFloat);
+						if (!IsNumberExpr(call.Args[i])) bytecode.Emit(Op.ConvToFloat);
 					}
-					_bytecode.Emit(builtIn);
+					bytecode.Emit(builtIn);
 					break;
 				case CallExpr { Name: "arraylen" or "sarraylen" } call:
 					for (var i = call.Args.Count - 1; i >= 0; --i)
 					{
 						Emit(call.Args[i]);
-						if (NeedsObjectConversion(call.Args[i])) _bytecode.Emit(Op.ConvToObject);
+						if (NeedsObjectConversion(call.Args[i])) bytecode.Emit(Op.ConvToObject);
 					}
-					_bytecode.Emit(Op.ObjSize);
+					bytecode.Emit(Op.ObjSize);
 					break;
 				case CallExpr { Name: "waitfor" } call:
 					for (var i = 0; i < call.Args.Count; ++i)
 					{
 						Emit(call.Args[i]);
-						if (i < 2 && NeedsStringConversion(call.Args[i])) _bytecode.Emit(Op.ConvToString);
-						else if (i == 2 && !IsNumberExpr(call.Args[i])) _bytecode.Emit(Op.ConvToFloat);
+						if (i < 2 && NeedsStringConversion(call.Args[i])) bytecode.Emit(Op.ConvToString);
+						else if (i == 2 && !IsNumberExpr(call.Args[i])) bytecode.Emit(Op.ConvToFloat);
 					}
-					_bytecode.Emit(Op.WaitFor);
+					bytecode.Emit(Op.WaitFor);
 					break;
 				case CallExpr { Name: "sleep" } call:
 					for (var i = 0; i < call.Args.Count; ++i)
 					{
 						Emit(call.Args[i]);
-						if (!IsNumberExpr(call.Args[i])) _bytecode.Emit(Op.ConvToFloat);
+						if (!IsNumberExpr(call.Args[i])) bytecode.Emit(Op.ConvToFloat);
 					}
-					_bytecode.Emit(Op.Sleep);
+					bytecode.Emit(Op.Sleep);
 					break;
 				case CallExpr { Name: "setarray" } call:
 					if (call.Args.Count > 0)
 					{
 						Emit(call.Args[0]);
-						if (NeedsObjectConversion(call.Args[0])) _bytecode.Emit(Op.ConvToObject);
+						if (NeedsObjectConversion(call.Args[0])) bytecode.Emit(Op.ConvToObject);
 					}
 					if (call.Args.Count > 1)
 					{
 						Emit(call.Args[1]);
-						if (!IsNumberExpr(call.Args[1])) _bytecode.Emit(Op.ConvToFloat);
+						if (!IsNumberExpr(call.Args[1])) bytecode.Emit(Op.ConvToFloat);
 					}
-					_bytecode.Emit(Op.SetArray);
+					bytecode.Emit(Op.SetArray);
 					break;
 				case CallExpr { Name: "makevar" } call:
 					for (var i = call.Args.Count - 1; i >= 0; --i)
 					{
 						Emit(call.Args[i]);
-						_bytecode.Emit(Op.ConvToString);
+						bytecode.Emit(Op.ConvToString);
 					}
-					_bytecode.Emit(Op.MakeVar);
+					bytecode.Emit(Op.MakeVar);
 					break;
 				case CallExpr { Name: "format" } call:
-					_bytecode.Emit(Op.TypeArray);
+					bytecode.Emit(Op.TypeArray);
 					for (var i = call.Args.Count - 1; i >= 0; --i) Emit(call.Args[i]);
-					_bytecode.Emit(Op.Format);
+					bytecode.Emit(Op.Format);
 					break;
 				case CallExpr call:
-					_bytecode.Emit(Op.TypeArray);
+					bytecode.Emit(Op.TypeArray);
 					for (var i = call.Args.Count - 1; i >= 0; --i) Emit(call.Args[i]);
-					_bytecode.Emit(Op.TypeVar);
-					_bytecode.EmitDynamicStringIndex(_bytecode.GetString(call.Name));
-					_bytecode.Emit(Op.Call);
+					bytecode.Emit(Op.TypeVar);
+					bytecode.EmitDynamicStringIndex(bytecode.GetString(call.Name));
+					bytecode.Emit(Op.Call);
 					break;
 				case ChainedCallExpr call:
-					_bytecode.Emit(Op.TypeArray);
+					bytecode.Emit(Op.TypeArray);
 					for (var i = call.Args.Count - 1; i >= 0; --i) Emit(call.Args[i]);
 					Emit(call.Call);
-					_bytecode.Emit(Op.Call);
+					bytecode.Emit(Op.Call);
 					break;
 				case DynamicMethodCallExpr call:
-					_bytecode.Emit(Op.TypeArray);
+					bytecode.Emit(Op.TypeArray);
 					for (var i = call.Args.Count - 1; i >= 0; --i) Emit(call.Args[i]);
 					Emit(call.Object);
-					if (NeedsObjectConversion(call.Object) || call.Object is ArrayIndexExpr) _bytecode.Emit(Op.ConvToObject);
+					if (NeedsObjectConversion(call.Object) || call.Object is ArrayIndexExpr) bytecode.Emit(Op.ConvToObject);
 					_dynamicMethodName = true;
 					if (call.Name is StringCastExpr { Expression: IdentifierExpr or MemberExpr { Object: IdentifierExpr { Name: "temp" } } } callNameCast)
 					{
 						Emit(callNameCast.Expression);
-						if (NeedsNumericConversion(callNameCast.Expression)) _bytecode.Emit(Op.ConvToFloat);
-						_bytecode.Emit(Op.Add);
+						if (NeedsNumericConversion(callNameCast.Expression)) bytecode.Emit(Op.ConvToFloat);
+						bytecode.Emit(Op.Add);
 					}
 					else if (call.Name is StringCastExpr { Expression: BinaryExpr { Op: "@" } nameConcat }) Emit(nameConcat);
 					else Emit(call.Name);
 					_dynamicMethodName = false;
-					if (NeedsStringConversion(call.Name) && call.Name is not BinaryExpr { Op: "@" }) _bytecode.Emit(Op.ConvToString);
-					_bytecode.Emit(Op.MemberAccess);
-					_bytecode.Emit(Op.Call);
+					if (NeedsStringConversion(call.Name) && call.Name is not BinaryExpr { Op: "@" }) bytecode.Emit(Op.ConvToString);
+					bytecode.Emit(Op.MemberAccess);
+					bytecode.Emit(Op.Call);
 					break;
 				case MethodCallExpr call:
 					if (call.Name == "size" && call.Args.Count == 0)
 					{
 						Emit(call.Object);
-						if (NeedsObjectConversion(call.Object) || call.Object is ArrayIndexExpr) _bytecode.Emit(Op.ConvToObject);
-						_bytecode.Emit(Op.ObjSize);
+						if (NeedsObjectConversion(call.Object) || call.Object is ArrayIndexExpr) bytecode.Emit(Op.ConvToObject);
+						bytecode.Emit(Op.ObjSize);
 						break;
 					}
 					if (call.Name == "type" && call.Args.Count == 0)
 					{
 						Emit(call.Object);
-						if (NeedsObjectConversion(call.Object)) _bytecode.Emit(Op.ConvToObject);
-						_bytecode.Emit(Op.ObjType);
+						if (NeedsObjectConversion(call.Object)) bytecode.Emit(Op.ConvToObject);
+						bytecode.Emit(Op.ObjType);
 						break;
 					}
 					if (call.Name == "indices" && call.Args.Count == 0)
 					{
 						Emit(call.Object);
-						_bytecode.Emit(Op.ObjIndices);
+						bytecode.Emit(Op.ObjIndices);
 						break;
 					}
 					if (call.Name == "link" && call.Args.Count == 0)
 					{
 						Emit(call.Object);
-						_bytecode.Emit(Op.ObjLink);
+						bytecode.Emit(Op.ObjLink);
 						break;
 					}
 					if (call.Name == "index")
 					{
 						Emit(call.Object);
-						if (NeedsObjectConversion(call.Object) || call.Object is ArrayIndexExpr) _bytecode.Emit(Op.ConvToObject);
+						if (NeedsObjectConversion(call.Object) || call.Object is ArrayIndexExpr) bytecode.Emit(Op.ConvToObject);
 						foreach (var arg in call.Args) Emit(arg);
-						_bytecode.Emit(Op.ObjIndex);
+						bytecode.Emit(Op.ObjIndex);
 						break;
 					}
 					if (call.Name == "length" && call.Args.Count == 0)
 					{
 						Emit(call.Object);
-						_bytecode.Emit(Op.ConvToString);
-						_bytecode.Emit(Op.ObjLength);
+						bytecode.Emit(Op.ConvToString);
+						bytecode.Emit(Op.ObjLength);
 						break;
 					}
 					if (call.Name == "substring")
 					{
 						Emit(call.Object);
-						_bytecode.Emit(Op.ConvToString);
+						bytecode.Emit(Op.ConvToString);
 						foreach (var arg in call.Args)
 						{
 							Emit(arg);
-							if (!IsNumberExpr(arg)) _bytecode.Emit(Op.ConvToFloat);
+							if (!IsNumberExpr(arg)) bytecode.Emit(Op.ConvToFloat);
 						}
-						_bytecode.Emit(Op.ObjSubstr);
+						bytecode.Emit(Op.ObjSubstr);
 						break;
 					}
 					if (call.Name == "pos")
 					{
 						Emit(call.Object);
-						_bytecode.Emit(Op.ConvToString);
+						bytecode.Emit(Op.ConvToString);
 						foreach (var arg in call.Args)
 						{
 							Emit(arg);
-							if (NeedsStringConversion(arg)) _bytecode.Emit(Op.ConvToString);
+							if (NeedsStringConversion(arg)) bytecode.Emit(Op.ConvToString);
 						}
-						_bytecode.Emit(Op.ObjPos);
+						bytecode.Emit(Op.ObjPos);
 						break;
 					}
 					if (call.Name == "charat")
 					{
 						Emit(call.Object);
-						_bytecode.Emit(Op.ConvToString);
+						bytecode.Emit(Op.ConvToString);
 						foreach (var arg in call.Args)
 						{
 							Emit(arg);
-							if (!IsNumberExpr(arg)) _bytecode.Emit(Op.ConvToFloat);
+							if (!IsNumberExpr(arg)) bytecode.Emit(Op.ConvToFloat);
 						}
-						_bytecode.Emit(Op.ObjCharAt);
+						bytecode.Emit(Op.ObjCharAt);
 						break;
 					}
 					if (call.Name is "starts" or "ends")
 					{
 						Emit(call.Object);
-						_bytecode.Emit(Op.ConvToString);
+						bytecode.Emit(Op.ConvToString);
 						foreach (var arg in call.Args) Emit(arg);
-						_bytecode.Emit(call.Name == "starts" ? Op.ObjStarts : Op.ObjEnds);
+						bytecode.Emit(call.Name == "starts" ? Op.ObjStarts : Op.ObjEnds);
 						break;
 					}
 					if (call.Name == "trim" && call.Args.Count == 0)
 					{
 						Emit(call.Object);
-						_bytecode.Emit(Op.ConvToString);
-						_bytecode.Emit(Op.ObjTrim);
+						bytecode.Emit(Op.ConvToString);
+						bytecode.Emit(Op.ObjTrim);
 						break;
 					}
 					if (call.Name == "tokenize")
 					{
 						Emit(call.Object);
-						_bytecode.Emit(Op.ConvToString);
+						bytecode.Emit(Op.ConvToString);
 						if (call.Args.Count == 0)
 						{
-							_bytecode.Emit(Op.TypeString);
-							_bytecode.EmitDynamicStringIndex(_bytecode.GetString(" ,"));
+							bytecode.Emit(Op.TypeString);
+							bytecode.EmitDynamicStringIndex(bytecode.GetString(" ,"));
 						}
 						else foreach (var arg in call.Args) Emit(arg);
-						_bytecode.Emit(Op.ObjTokenize);
+						bytecode.Emit(Op.ObjTokenize);
 						break;
 					}
 					if (call.Name == "positions")
 					{
 						Emit(call.Object);
-						_bytecode.Emit(Op.ConvToString);
+						bytecode.Emit(Op.ConvToString);
 						foreach (var arg in call.Args)
 						{
 							Emit(arg);
-							if (NeedsStringConversion(arg)) _bytecode.Emit(Op.ConvToString);
+							if (NeedsStringConversion(arg)) bytecode.Emit(Op.ConvToString);
 						}
-						_bytecode.Emit(Op.ObjPositions);
+						bytecode.Emit(Op.ObjPositions);
 						break;
 					}
 					if (call.Name == "subarray")
 					{
 						for (var i = call.Args.Count - 1; i >= 0; --i) Emit(call.Args[i]);
 						Emit(call.Object);
-						_bytecode.Emit(Op.ObjSubarray);
+						bytecode.Emit(Op.ObjSubarray);
 						break;
 					}
 					if (call.Name == "clear" && call.Args.Count == 0)
 					{
 						Emit(call.Object);
-						if (NeedsObjectConversion(call.Object)) _bytecode.Emit(Op.ConvToObject);
-						_bytecode.Emit(Op.ObjClear);
+						if (NeedsObjectConversion(call.Object)) bytecode.Emit(Op.ConvToObject);
+						bytecode.Emit(Op.ObjClear);
 						break;
 					}
 					if (call.Name is "add" or "delete")
 					{
 						Emit(call.Object);
-						if (NeedsObjectConversion(call.Object) || call.Object is ArrayIndexExpr) _bytecode.Emit(Op.ConvToObject);
+						if (NeedsObjectConversion(call.Object) || call.Object is ArrayIndexExpr) bytecode.Emit(Op.ConvToObject);
 						foreach (var arg in call.Args) Emit(arg);
-						_bytecode.Emit(call.Name == "add" ? Op.ObjAddString : Op.ObjDeleteString);
+						bytecode.Emit(call.Name == "add" ? Op.ObjAddString : Op.ObjDeleteString);
 						break;
 					}
 					if (call.Name is "insert" or "remove" or "replace")
 					{
 						Emit(call.Object);
-						if (NeedsObjectConversion(call.Object)) _bytecode.Emit(Op.ConvToObject);
+						if (NeedsObjectConversion(call.Object)) bytecode.Emit(Op.ConvToObject);
 						for (var i = call.Args.Count - 1; i >= 0; --i) Emit(call.Args[i]);
-						_bytecode.Emit(call.Name switch
+						bytecode.Emit(call.Name switch
 						{
 							"insert" => Op.ObjInsertString,
 							"remove" => Op.ObjRemoveString,
-							_ => Op.ObjReplaceString
+							_ => Op.ObjReplaceString,
 						});
 						break;
 					}
-					_bytecode.Emit(Op.TypeArray);
+					bytecode.Emit(Op.TypeArray);
 					for (var i = call.Args.Count - 1; i >= 0; --i) Emit(call.Args[i]);
 					Emit(call.Object);
-					if (NeedsObjectConversion(call.Object) || call.Object is ArrayIndexExpr) _bytecode.Emit(Op.ConvToObject);
-					_bytecode.Emit(Op.TypeVar);
-					_bytecode.EmitDynamicStringIndex(_bytecode.GetString(call.Name));
-					_bytecode.Emit(Op.MemberAccess);
-					_bytecode.Emit(Op.Call);
+					if (NeedsObjectConversion(call.Object) || call.Object is ArrayIndexExpr) bytecode.Emit(Op.ConvToObject);
+					bytecode.Emit(Op.TypeVar);
+					bytecode.EmitDynamicStringIndex(bytecode.GetString(call.Name));
+					bytecode.Emit(Op.MemberAccess);
+					bytecode.Emit(Op.Call);
 					break;
 				case NewObjectExpr obj:
-					var typeNameIndex = _bytecode.GetString(obj.TypeName);
+					var typeNameIndex = bytecode.GetString(obj.TypeName);
 					if (obj.Args.Count == 1)
 					{
 						Emit(obj.Args[0]);
-						_bytecode.Emit(Op.InlineNew);
+						bytecode.Emit(Op.InlineNew);
 					}
 					else
 					{
-						_bytecode.Emit(Op.TypeVar);
-						_bytecode.EmitDynamicStringIndex(_bytecode.GetString("unknown_object"));
+						bytecode.Emit(Op.TypeVar);
+						bytecode.EmitDynamicStringIndex(bytecode.GetString("unknown_object"));
 					}
-					_bytecode.Emit(Op.TypeString);
-					_bytecode.EmitDynamicStringIndex(typeNameIndex);
-					_bytecode.Emit(Op.NewObject);
+					bytecode.Emit(Op.TypeString);
+					bytecode.EmitDynamicStringIndex(typeNameIndex);
+					bytecode.Emit(Op.NewObject);
 					break;
 				case NewArrayExpr array:
 					for (var i = 0; i < array.Dimensions.Count; ++i)
 					{
 						Emit(array.Dimensions[i]);
-						_bytecode.Emit(i == 0 ? Op.ArrayNew : Op.ArrayNewMultiDim);
+						bytecode.Emit(i == 0 ? Op.ArrayNew : Op.ArrayNewMultiDim);
 					}
 					break;
 				case LambdaExpr lambda:
 					EmitFunction(new(lambda.Name, null, true, lambda.Args, lambda.Body), false);
-					_bytecode.Emit(Op.This);
-					_bytecode.Emit(Op.TypeVar);
-					_bytecode.EmitDynamicStringIndex(_bytecode.GetString(lambda.Name));
-					_bytecode.Emit(Op.MemberAccess);
-					_bytecode.Emit(Op.ConvToObject);
+					bytecode.Emit(Op.This);
+					bytecode.Emit(Op.TypeVar);
+					bytecode.EmitDynamicStringIndex(bytecode.GetString(lambda.Name));
+					bytecode.Emit(Op.MemberAccess);
+					bytecode.Emit(Op.ConvToObject);
 					break;
 				case ArrayLiteralExpr array:
-					_bytecode.Emit(Op.TypeArray);
+					bytecode.Emit(Op.TypeArray);
 					for (var i = array.Values.Count - 1; i >= 0; --i) Emit(array.Values[i]);
-					_bytecode.Emit(Op.ArrayEnd);
+					bytecode.Emit(Op.ArrayEnd);
 					break;
 			}
 		}
@@ -1811,28 +1918,28 @@ internal static class GS2Compiler
 		private void EmitArrayIndex(ArrayIndexExpr expr, bool assignmentTarget)
 		{
 			Emit(expr.Target);
-			if (expr.Target is not ArrayIndexExpr) _bytecode.Emit(Op.ConvToObject);
+			if (expr.Target is not ArrayIndexExpr) bytecode.Emit(Op.ConvToObject);
 			Emit(expr.Index);
-			if (!IsNumberExpr(expr.Index)) _bytecode.Emit(Op.ConvToFloat);
-			if (!assignmentTarget) _bytecode.Emit(Op.Array);
+			if (!IsNumberExpr(expr.Index)) bytecode.Emit(Op.ConvToFloat);
+			if (!assignmentTarget) bytecode.Emit(Op.Array);
 		}
 
 		private void EmitTernary(TernaryExpr ternary, int? chainedSuccessLoc = null)
 		{
 			Emit(ternary.Condition, false, false, 0);
-			if (!IsBooleanExpr(ternary.Condition)) _bytecode.Emit(Op.ConvToFloat);
-			if (chainedSuccessLoc.HasValue) _bytecode.PatchShort(chainedSuccessLoc.Value, _bytecode.OpIndex);
-			_bytecode.Emit(Op.If);
-			var failLoc = _bytecode.EmitNumberOperandPlaceholder();
+			if (!IsBooleanExpr(ternary.Condition)) bytecode.Emit(Op.ConvToFloat);
+			if (chainedSuccessLoc.HasValue) bytecode.PatchShort(chainedSuccessLoc.Value, bytecode.OpIndex);
+			bytecode.Emit(Op.If);
+			var failLoc = bytecode.EmitNumberOperandPlaceholder();
 			Emit(ternary.WhenTrue);
-			_bytecode.PatchShort(failLoc, _bytecode.OpIndex + 1);
-			_bytecode.Emit(Op.SetIndex);
-			var successLoc = _bytecode.EmitNumberOperandPlaceholder();
+			bytecode.PatchShort(failLoc, bytecode.OpIndex + 1);
+			bytecode.Emit(Op.SetIndex);
+			var successLoc = bytecode.EmitNumberOperandPlaceholder();
 			if (ternary.WhenFalse is TernaryExpr nested) EmitTernary(nested, successLoc);
 			else
 			{
 				Emit(ternary.WhenFalse);
-				_bytecode.PatchShort(successLoc, _bytecode.OpIndex);
+				bytecode.PatchShort(successLoc, bytecode.OpIndex);
 			}
 		}
 
@@ -1844,15 +1951,15 @@ internal static class GS2Compiler
 			for (var i = 0; i < terms.Count - 1; ++i)
 			{
 				Emit(terms[i], false, false, 0);
-				if (!IsBooleanExpr(terms[i])) _bytecode.Emit(Op.ConvToFloat);
-				_bytecode.Emit(logical.Op == "&&" ? Op.And : Op.Or);
-				patches.Add(_bytecode.EmitNumberOperandPlaceholder());
+				if (!IsBooleanExpr(terms[i])) bytecode.Emit(Op.ConvToFloat);
+				bytecode.Emit(logical.Op == "&&" ? Op.And : Op.Or);
+				patches.Add(bytecode.EmitNumberOperandPlaceholder());
 			}
 			Emit(terms[^1], false, false, 0);
-			if (!IsBooleanExpr(terms[^1])) _bytecode.Emit(Op.ConvToFloat);
-			if (logicalInline) _bytecode.Emit(Op.InlineConditional);
-			var target = _bytecode.OpIndex - (logicalInline ? 1 : 0) + (!logicalInline ? suppressedLogicalPatchOffset : 0);
-			foreach (var patch in patches) _bytecode.PatchShort(patch, target);
+			if (!IsBooleanExpr(terms[^1])) bytecode.Emit(Op.ConvToFloat);
+			if (logicalInline) bytecode.Emit(Op.InlineConditional);
+			var target = bytecode.OpIndex - (logicalInline ? 1 : 0) + (!logicalInline ? suppressedLogicalPatchOffset : 0);
+			foreach (var patch in patches) bytecode.PatchShort(patch, target);
 		}
 
 		private static void FlattenLogical(Expr expr, string op, List<Expr> terms)
@@ -1870,13 +1977,13 @@ internal static class GS2Compiler
 		private void EmitMultiArrayIndex(MultiArrayIndexExpr expr, bool assignmentTarget)
 		{
 			Emit(expr.Target);
-			_bytecode.Emit(Op.ConvToObject);
+			bytecode.Emit(Op.ConvToObject);
 			foreach (var index in expr.Indices)
 			{
 				Emit(index);
-				if (!IsNumberExpr(index)) _bytecode.Emit(Op.ConvToFloat);
+				if (!IsNumberExpr(index)) bytecode.Emit(Op.ConvToFloat);
 			}
-			if (!assignmentTarget) _bytecode.Emit(Op.ArrayMultiDim);
+			if (!assignmentTarget) bytecode.Emit(Op.ArrayMultiDim);
 		}
 
 		private static bool IsCompoundAssign(string op) => op is "+=" or "-=" or "*=" or "/=" or "^=" or "%=" or "@=" or "<<=" or ">>=";
@@ -1894,20 +2001,20 @@ internal static class GS2Compiler
 			["log"] = Op.Log,
 			["random"] = Op.Random,
 			["min"] = Op.Min,
-			["max"] = Op.Max
+			["max"] = Op.Max,
 		};
 
 		private static readonly Dictionary<string, Op> NonReversedBuiltInCalls = new(StringComparer.Ordinal)
 		{
 			["pow"] = Op.Pow,
 			["getangle"] = Op.GetAngle,
-			["getdir"] = Op.GetDir
+			["getdir"] = Op.GetDir,
 		};
 
 		private static readonly HashSet<string> NonReturningBuiltInCalls = new(StringComparer.Ordinal)
 		{
 			"sleep",
-			"setarray"
+			"setarray",
 		};
 
 		private static readonly HashSet<string> NonReturningMethodCalls = new(StringComparer.Ordinal)
@@ -1917,7 +2024,7 @@ internal static class GS2Compiler
 			"delete",
 			"insert",
 			"remove",
-			"replace"
+			"replace",
 		};
 
 		private static bool IsNumericOp(string op) => op is "+" or "-" or "*" or "/" or "%" or "^";
@@ -1941,7 +2048,7 @@ internal static class GS2Compiler
 		{
 			IdentifierExpr { Name: "this" or "thiso" or "player" or "playero" or "level" or "temp" } => false,
 			ArrayIndexExpr => false,
-			_ => true
+			_ => true,
 		};
 
 		private static bool IsNumberExpr(Expr expr) => ExpressionTypeOf(expr) == ExprType.Number;
@@ -1965,7 +2072,7 @@ internal static class GS2Compiler
 			TernaryExpr { WhenTrue: var trueExpr, WhenFalse: var falseExpr } when ExpressionTypeOf(trueExpr) == ExpressionTypeOf(falseExpr) => ExpressionTypeOf(trueExpr),
 			ArrayLiteralExpr => ExprType.Array,
 			NewObjectExpr or NewArrayExpr or NullExpr => ExprType.Object,
-			_ => ExprType.Unknown
+			_ => ExprType.Unknown,
 		};
 
 		private static bool IsBooleanExpr(Expr expr) => expr switch
@@ -1973,7 +2080,7 @@ internal static class GS2Compiler
 			BinaryExpr { Op: "==" or "!=" or "<" or "<=" or "=<" or ">" or ">=" or "=>" or "&&" or "||" } => true,
 			InExpr => true,
 			UnaryExpr { Op: "!" } => true,
-			_ => false
+			_ => false,
 		};
 
 		private static bool ContainsCall(Stmt statement) => statement switch
@@ -1989,7 +2096,7 @@ internal static class GS2Compiler
 			WithStmt stmt => ContainsCall(stmt.Target) || stmt.Body.Exists(ContainsCall),
 			SwitchStmt stmt => ContainsCall(stmt.Expression) || stmt.Cases.Exists(c => c.Body.Exists(ContainsCall) || c.Labels.Exists(label => label != null && ContainsCall(label))),
 			NewStmt stmt => stmt.Args.Exists(ContainsCall) || stmt.Body.Exists(ContainsCall),
-			_ => false
+			_ => false,
 		};
 
 		private static HashSet<string> CollectTempAliases(FunctionNode function)
@@ -2153,7 +2260,7 @@ internal static class GS2Compiler
 			DynamicVarExpr dynamicVar => ContainsCall(dynamicVar.Name),
 			ArrayIndexExpr index => ContainsCall(index.Target) || ContainsCall(index.Index),
 			MultiArrayIndexExpr index => ContainsCall(index.Target) || index.Indices.Exists(ContainsCall),
-			_ => false
+			_ => false,
 		};
 
 		private static Op BinaryOpcode(string op) => op switch
@@ -2178,7 +2285,7 @@ internal static class GS2Compiler
 			">>" => Op.ShiftRight,
 			"&&" => Op.And,
 			"||" => Op.Or,
-			_ => Op.None
+			_ => Op.None,
 		};
 
 		private static Op CompoundOpcode(string op) => op switch
@@ -2186,12 +2293,13 @@ internal static class GS2Compiler
 			"<<=" => Op.ShiftLeft,
 			">>=" => Op.ShiftRight,
 			"^=" => Op.Pow,
-			_ => BinaryOpcode(op[0].ToString())
+			_ => BinaryOpcode(op[0].ToString()),
 		};
 	}
 
 	private sealed class BytecodeWriter
 	{
+		private readonly int _gs1EventFlags;
 		private readonly List<byte> _code = [];
 		private readonly List<string> _strings = [];
 		private readonly Dictionary<string, int> _stringIndex = new(StringComparer.Ordinal);
@@ -2200,6 +2308,8 @@ internal static class GS2Compiler
 		private readonly List<int> _prejumpPatches = [];
 		private Op _lastOp = Op.None;
 		public int OpIndex { get; private set; }
+
+		public BytecodeWriter(int gs1EventFlags) => _gs1EventFlags = gs1EventFlags;
 
 		public int GetString(string value)
 		{
@@ -2272,18 +2382,20 @@ internal static class GS2Compiler
 			Emit(Op.Ret);
 			foreach (var loc in _prejumpPatches) PatchShort(loc, OpIndex);
 			List<byte> result = [];
-			WriteSegment(result, 1, [0, 0, 0, 0]);
+			List<byte> gs1EventFlags = [];
+			WriteInt(gs1EventFlags, _gs1EventFlags);
+			WriteSegment(result, BytecodeSegment.Gs1EventFlags, gs1EventFlags);
 			List<byte> functions = [];
 			foreach (var function in OrderedFunctions())
 			{
 				WriteInt(functions, function.OpIndex);
 				WriteCString(functions, function.Name);
 			}
-			WriteSegment(result, 2, functions);
+			WriteSegment(result, BytecodeSegment.FunctionNames, functions);
 			List<byte> strings = [];
 			foreach (var str in _strings) WriteCString(strings, str);
-			WriteSegment(result, 3, strings);
-			WriteSegment(result, 4, _code);
+			WriteSegment(result, BytecodeSegment.Strings, strings);
+			WriteSegment(result, BytecodeSegment.Bytecode, _code);
 			result.Add(10);
 			return [.. result];
 		}
@@ -2291,16 +2403,13 @@ internal static class GS2Compiler
 		private IEnumerable<FunctionEntry> OrderedFunctions()
 		{
 			HashSet<string> emitted = new(StringComparer.Ordinal);
-			foreach (var str in _strings)
-				foreach (var fn in _functions)
-					if (fn.Name == str && emitted.Add(fn.Name)) yield return fn;
-			foreach (var fn in _functions)
-				if (emitted.Add(fn.Name)) yield return fn;
+			foreach (var fn in _strings.SelectMany(str => _functions.Where(fn => fn.Name == str && emitted.Add(fn.Name)))) yield return fn;
+			foreach (var fn in _functions.Where(fn => emitted.Add(fn.Name))) yield return fn;
 		}
 
-		private static void WriteSegment(List<byte> target, int type, IReadOnlyCollection<byte> bytes)
+		private static void WriteSegment(List<byte> target, BytecodeSegment type, List<byte> bytes)
 		{
-			WriteInt(target, type);
+			WriteInt(target, (int)type);
 			WriteInt(target, bytes.Count);
 			target.AddRange(bytes);
 		}
@@ -2338,7 +2447,7 @@ internal static class GS2Compiler
 		}
 	}
 
-	private sealed record ProgramNode(Dictionary<string, Expr> Constants, Dictionary<string, Dictionary<string, int>> Enums, List<ProgramItem> Items);
+	private sealed record ProgramNode(Dictionary<string, Expr> Constants, Dictionary<string, Dictionary<string, int>> Enums, List<ProgramItem> Items, int Gs1EventFlags = 0);
 	private abstract record ProgramItem;
 	private sealed record FunctionItem(FunctionNode Function) : ProgramItem;
 	private sealed record StatementItem(Stmt Statement) : ProgramItem;
@@ -2501,6 +2610,6 @@ internal static class GS2Compiler
 		Player = 182,
 		Playero = 183,
 		Level = 184,
-		Temp = 189
+		Temp = 189,
 	}
 }

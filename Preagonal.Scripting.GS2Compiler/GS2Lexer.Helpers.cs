@@ -18,7 +18,7 @@ public partial class GS2Lexer
 					'"' => '"',
 					'\'' => '\'',
 					'\\' => '\\',
-					var c => c
+					var c => c,
 				});
 			}
 			else builder.Append(text[i]);

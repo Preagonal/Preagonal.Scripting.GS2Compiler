@@ -105,6 +105,136 @@ public class InterfaceTests
 	}
 
 	[Fact]
+	public void Given_gs1_top_level_object_events_When_compiling_with_gs1_grammar_Then_gs1_event_flags_are_written()
+	{
+		const string scriptText =
+			"""
+						if (playerenters || washit) {
+						  this.value = 1;
+						}
+			""";
+
+		var result = Interface.CompileCode(scriptText, withHeader: false, grammar: ScriptGrammar.GS1);
+
+		Assert.True(result.Success, result.ErrMsg);
+		Assert.Equal((1 << 0) | (1 << 22), ReadGs1EventFlags(result.ByteCode));
+	}
+
+	[Fact]
+	public void Given_gs1_top_level_event_aliases_When_compiling_with_gs1_grammar_Then_aliases_use_canonical_event_bits()
+	{
+		const string scriptText =
+			"""
+						if (playertouchesme || playerhurted || wasshooted) {
+						  this.value = 1;
+						}
+			""";
+
+		var result = Interface.CompileCode(scriptText, withHeader: false, grammar: ScriptGrammar.GS1);
+
+		Assert.True(result.Success, result.ErrMsg);
+		Assert.Equal((1 << 1) | (1 << 4) | (1 << 14), ReadGs1EventFlags(result.ByteCode));
+	}
+
+	[Fact]
+	public void Given_gs1_created_condition_When_compiling_with_gs1_grammar_Then_gs1_event_flags_stay_zero()
+	{
+		const string scriptText =
+			"""
+						if (created) {
+						  this.value = 1;
+						}
+			""";
+
+		var result = Interface.CompileCode(scriptText, withHeader: false, grammar: ScriptGrammar.GS1);
+
+		Assert.True(result.Success, result.ErrMsg);
+		Assert.Equal(0, ReadGs1EventFlags(result.ByteCode));
+	}
+
+	[Fact]
+	public void Given_gs2_top_level_object_event_name_When_compiling_with_gs2_grammar_Then_gs1_event_flags_are_written()
+	{
+		const string scriptText =
+			"""
+						//#CLIENTSIDE
+						function onCreated() {
+						  echo("created");
+						}
+
+						if (playerenters) {
+						  triggeraction(0, 0, "serverside", player.weapon, "test", "hi");
+						}
+			""";
+
+		var result = Interface.CompileCode(scriptText, withHeader: false, grammar: ScriptGrammar.GS2);
+		var functionNames = ReadFunctionNames(result.ByteCode);
+		var strings = ReadStringTable(result.ByteCode);
+
+		Assert.True(result.Success, result.ErrMsg);
+		Assert.Equal(1 << 0, ReadGs1EventFlags(result.ByteCode));
+		Assert.Contains("onCreated", functionNames);
+		Assert.Contains("created", strings);
+		Assert.Contains("triggeraction", strings);
+		Assert.Contains("serverside", strings);
+		Assert.Contains("weapon", strings);
+		Assert.Contains("test", strings);
+		Assert.Contains("hi", strings);
+	}
+
+	[Fact]
+	public void Given_gs2_function_body_object_event_name_When_compiling_with_gs2_grammar_Then_gs1_event_flags_stay_zero()
+	{
+		const string scriptText =
+			"""
+						function onCreated() {
+						  if (playerenters) {
+						    this.value = 1;
+						  }
+						}
+			""";
+
+		var result = Interface.CompileCode(scriptText, withHeader: false, grammar: ScriptGrammar.GS2);
+
+		Assert.True(result.Success, result.ErrMsg);
+		Assert.Equal(0, ReadGs1EventFlags(result.ByteCode));
+	}
+
+	[Fact]
+	public void Given_gs1_clientside_action_and_playerchats_script_When_compiling_with_gs1_grammar_Then_playerchats_event_flag_and_commands_are_emitted()
+	{
+		const string scriptText =
+			"""
+						//#CLIENTSIDE
+						if (actionclientside) {
+						  say2 hi;
+						  setplayerprop #c,received in weapon #p(0);
+						}
+
+						if (playerchats && strequals(#c,test2)) {
+						  triggeraction 0,0,serverside,#w,test,hi;
+						}
+			""";
+
+		var result = Interface.CompileCode(scriptText, withHeader: false, grammar: ScriptGrammar.GS1);
+		var strings = ReadStringTable(result.ByteCode);
+
+		Assert.True(result.Success, result.ErrMsg);
+		Assert.Equal(1 << 3, ReadGs1EventFlags(result.ByteCode));
+		Assert.Contains("actionclientside", strings);
+		Assert.Contains("say2", strings);
+		Assert.Contains("hi", strings);
+		Assert.Contains("setplayerprop", strings);
+		Assert.Contains("#c", strings);
+		Assert.Contains("received in weapon #p(0)", strings);
+		Assert.Contains("test2", strings);
+		Assert.Contains("triggeraction", strings);
+		Assert.Contains("serverside", strings);
+		Assert.Contains("#w", strings);
+		Assert.Contains("test", strings);
+	}
+
+	[Fact]
 	public void Given_script_with_continue_When_compiling_Then_success_is_true_and_bytecode_is_not_empty()
 	{
 		const string scriptText =
@@ -823,6 +953,12 @@ public class InterfaceTests
 	}
 
 	private static byte[] ReadBytecodeSegment(byte[] bytecode) => ReadSegment(bytecode, 4);
+
+	private static int ReadGs1EventFlags(byte[] bytecode)
+	{
+		var segment = ReadSegment(bytecode, 1);
+		return segment.Length >= 4 ? ReadInt(segment, 0) : 0;
+	}
 
 	private static byte[] ReadSegment(byte[] bytecode, int segmentType)
 	{

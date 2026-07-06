@@ -45,7 +45,7 @@ public static unsafe class NativeExports
 			Success = result.Success,
 			ErrMsg = result.ErrMsg == null ? IntPtr.Zero : Marshal.StringToCoTaskMemUTF8(result.ErrMsg),
 			ByteCode = result.ByteCode.Length == 0 ? IntPtr.Zero : Copy(result.ByteCode),
-			ByteCodeSize = (uint)result.ByteCode.Length
+			ByteCodeSize = (uint)result.ByteCode.Length,
 		};
 	}
 
