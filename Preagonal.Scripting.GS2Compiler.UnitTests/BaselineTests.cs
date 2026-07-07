@@ -16,6 +16,7 @@ public class BaselineTests
 		yield return [Path.Combine(root, "tests", "scripts", "statements", "02_loops.gs2")];
 		yield return [Path.Combine(root, "tests", "scripts", "statements", "03_switch.gs2")];
 		yield return [Path.Combine(root, "tests", "scripts", "statements", "04_with.gs2")];
+		yield return [Path.Combine(root, "tests", "scripts", "statements", "05_goto.gs2")];
 	}
 
 	public static IEnumerable<object[]> AdvancedScripts()

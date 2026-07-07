@@ -199,6 +199,8 @@ internal static class GS2Compiler
 				if (context.returnStatement() is { } returnStatement) return new ReturnStmt(returnStatement.expression() == null ? new NumberExpr("0") : BuildExpression(returnStatement.expression()));
 				if (context.breakStatement() != null) return new BreakStmt();
 				if (context.continueStatement() != null) return new ContinueStmt();
+				if (context.gotoStatement() is { } gotoStatement) return new GotoStmt(gotoStatement.IDENTIFIER().GetText());
+				if (context.labelStatement() is { } labelStatement) return new LabelStmt(labelStatement.IDENTIFIER().GetText());
 				if (context.expressionStatement() is { } expressionStatement) return new ExprStmt(BuildExpression(expressionStatement.expression()));
 				throw Failure(context);
 			}
@@ -979,6 +981,14 @@ internal static class GS2Compiler
 		private readonly Stack<List<int>>                            _conditionSuccessPatches = new();
 		private readonly Dictionary<string, string>                  _negativeFloatText       = new(StringComparer.Ordinal);
 		private readonly Stack<HashSet<string>>                      _tempAliases             = new();
+		// Labels aren't lexically nested within a function the way loops are, so each function
+		// just gets one flat dictionary - but a lambda expression triggers a nested EmitFunction
+		// call while the enclosing function's emission is still in progress (see the LambdaExpr
+		// case in Emit), so these are stacked per function-emission, not per-loop.
+		// Seeded with one base scope so a goto/label statement written at top level (outside any
+		// function) also resolves, without EmitFunction needing to special-case "am I nested".
+		private readonly Stack<Dictionary<string, int>>              _labelAddresses          = new([new Dictionary<string, int>(StringComparer.Ordinal)]);
+		private readonly Stack<Dictionary<string, List<int>>>        _pendingGotoPatches      = new([new Dictionary<string, List<int>>(StringComparer.Ordinal)]);
 		private          int                                         _newObjectCount;
 		private          bool                                        _dynamicMethodName;
 
@@ -992,12 +1002,17 @@ internal static class GS2Compiler
 			if (node.ObjectName == "universe") functionName = (node.Public ? "public." : "") + node.Name + "," + functionName;
 			var addedFunction = bytecode.AddFunction(functionName, bytecode.OpIndex, 0);
 			_tempAliases.Push(CollectTempAliases(node));
+			_labelAddresses.Push(new Dictionary<string, int>(StringComparer.Ordinal));
+			_pendingGotoPatches.Push(new Dictionary<string, List<int>>(StringComparer.Ordinal));
 			bytecode.Emit(Op.TypeArray);
 			for (var i = node.Args.Count - 1; i >= 0; --i) Emit(node.Args[i]);
 			bytecode.Emit(Op.FuncParamsEnd);
 			bytecode.Emit(Op.Jmp);
 			if (node.Body.Exists(ContainsCall)) bytecode.Emit(Op.CmdCall);
 			foreach (var statement in node.Body) EmitStatement(statement);
+			var unresolvedGotoPatches = _pendingGotoPatches.Pop();
+			_labelAddresses.Pop();
+			if (unresolvedGotoPatches.Count > 0) throw new InvalidOperationException($"goto to undefined label(s) in function '{functionName}': {string.Join(", ", unresolvedGotoPatches.Keys)}");
 			_tempAliases.Pop();
 			var lastStatement = LastMeaningfulStatement(node.Body);
 			if (node.Name != "getPreviewSpriteCount" && (lastStatement == null || !DefinitelyReturns(lastStatement)))
@@ -1070,6 +1085,8 @@ internal static class GS2Compiler
 			else if (statement is SwitchStmt switchStatement) EmitSwitch(switchStatement);
 			else if (statement is BreakStmt) EmitBreak();
 			else if (statement is ContinueStmt) EmitContinue();
+			else if (statement is GotoStmt gotoStatement) EmitGoto(gotoStatement);
+			else if (statement is LabelStmt labelStatement) EmitLabel(labelStatement);
 			else if (statement is InlineStmt inlineStatement) EmitStatement(inlineStatement.Statement, false);
 			else if (statement is BlockStmt blockStatement) foreach (var stmt in blockStatement.Body) EmitStatement(stmt);
 			else if (statement is NewStmt newStatement) EmitNewStatement(newStatement);
@@ -1253,6 +1270,27 @@ internal static class GS2Compiler
 			if (_continuePatches.Count == 0) return;
 			bytecode.Emit(Op.SetIndex);
 			_continuePatches.Peek().Add(bytecode.EmitNumberOperandPlaceholder());
+		}
+
+		private void EmitGoto(GotoStmt statement)
+		{
+			bytecode.Emit(Op.SetIndex);
+			if (_labelAddresses.Peek().TryGetValue(statement.Label, out var address))
+			{
+				bytecode.EmitDynamicNumber(address);
+				return;
+			}
+			var patches = _pendingGotoPatches.Peek();
+			if (!patches.TryGetValue(statement.Label, out var pending)) patches[statement.Label] = pending = [];
+			pending.Add(bytecode.EmitNumberOperandPlaceholder());
+		}
+
+		private void EmitLabel(LabelStmt statement)
+		{
+			_labelAddresses.Peek()[statement.Label] = bytecode.OpIndex;
+			var patches = _pendingGotoPatches.Peek();
+			if (!patches.Remove(statement.Label, out var pending)) return;
+			foreach (var patch in pending) bytecode.PatchShort(patch, bytecode.OpIndex);
 		}
 
 		private void EmitNewStatement(NewStmt statement)
