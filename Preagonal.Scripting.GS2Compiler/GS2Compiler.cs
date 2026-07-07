@@ -7,6 +7,7 @@ using System.Text;
 using Antlr4.Runtime;
 using Antlr4.Runtime.Tree;
 using Preagonal.Scripting.GS2Compiler.Enums;
+using Preagonal.Scripting.GSAst;
 
 namespace Preagonal.Scripting.GS2Compiler;
 
@@ -2447,52 +2448,6 @@ internal static class GS2Compiler
 		}
 	}
 
-	private sealed record ProgramNode(Dictionary<string, Expr> Constants, Dictionary<string, Dictionary<string, int>> Enums, List<ProgramItem> Items, int Gs1EventFlags = 0);
-	private abstract record ProgramItem;
-	private sealed record FunctionItem(FunctionNode Function) : ProgramItem;
-	private sealed record StatementItem(Stmt Statement) : ProgramItem;
-	private sealed record FunctionNode(string Name, string? ObjectName, bool Public, List<Expr> Args, List<Stmt> Body);
-	private abstract record Stmt;
-	private sealed record ExprStmt(Expr Expression) : Stmt;
-	private sealed record InlineStmt(Stmt Statement) : Stmt;
-	private sealed record BlockStmt(List<Stmt> Body) : Stmt;
-	private sealed record ReturnStmt(Expr Expression) : Stmt;
-	private sealed record IfStmt(Expr Condition, List<Stmt> ThenBody, List<Stmt> ElseBody, bool HasElse) : Stmt;
-	private sealed record ForStmt(Expr? Init, Expr Condition, Expr? Post, List<Stmt> Body) : Stmt;
-	private sealed record ForEachStmt(Expr Name, Expr Source, List<Stmt> Body) : Stmt;
-	private sealed record WhileStmt(Expr Condition, List<Stmt> Body) : Stmt;
-	private sealed record WithStmt(Expr Target, List<Stmt> Body) : Stmt;
-	private sealed record SwitchStmt(Expr Expression, List<SwitchCase> Cases) : Stmt;
-	private sealed record NewStmt(string TypeName, List<Expr> Args, List<Stmt> Body) : Stmt;
-	private sealed record BreakStmt : Stmt;
-	private sealed record ContinueStmt : Stmt;
-	private sealed record SwitchCase(List<Expr?> Labels, List<Stmt> Body);
-	private abstract record Expr;
-	private sealed record BinaryExpr(Expr Left, string Op, Expr Right) : Expr;
-	private sealed record InExpr(Expr Expression, Expr Lower, Expr? Upper) : Expr;
-	private sealed record TernaryExpr(Expr Condition, Expr WhenTrue, Expr WhenFalse) : Expr;
-	private sealed record UnaryExpr(string Op, Expr Expression, bool Postfix = false) : Expr;
-	private sealed record StringCastExpr(Expr Expression) : Expr;
-	private sealed record CastExpr(string Type, Expr Expression) : Expr;
-	private sealed record MemberExpr(Expr Object, string Name) : Expr;
-	private sealed record DynamicMemberExpr(Expr Object, Expr Name) : Expr;
-	private sealed record DynamicVarExpr(Expr Name) : Expr;
-	private sealed record ArrayIndexExpr(Expr Target, Expr Index) : Expr;
-	private sealed record MultiArrayIndexExpr(Expr Target, List<Expr> Indices) : Expr;
-	private sealed record IdentifierExpr(string Name) : Expr;
-	private sealed record EnumExpr(string EnumName, string MemberName) : Expr;
-	private sealed record NumberExpr(string Text) : Expr;
-	private sealed record StringExpr(string Value) : Expr;
-	private sealed record BoolExpr(bool Value) : Expr;
-	private sealed record NullExpr : Expr;
-	private sealed record CallExpr(string Name, List<Expr> Args) : Expr;
-	private sealed record ChainedCallExpr(CallExpr Call, List<Expr> Args) : Expr;
-	private sealed record MethodCallExpr(Expr Object, string Name, List<Expr> Args) : Expr;
-	private sealed record DynamicMethodCallExpr(Expr Object, Expr Name, List<Expr> Args) : Expr;
-	private sealed record NewObjectExpr(string TypeName, List<Expr> Args) : Expr;
-	private sealed record NewArrayExpr(List<Expr> Dimensions) : Expr;
-	private sealed record LambdaExpr(string Name, List<Expr> Args, List<Stmt> Body) : Expr;
-	private sealed record ArrayLiteralExpr(List<Expr> Values) : Expr;
 	private sealed record FunctionEntry(string Name, int OpIndex, int JmpLoc);
 	private enum ExprType { Unknown, Number, String, Array, Object }
 

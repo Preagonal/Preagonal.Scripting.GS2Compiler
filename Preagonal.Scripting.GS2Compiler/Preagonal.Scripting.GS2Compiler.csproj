@@ -32,6 +32,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\Preagonal.Scripting.GSAst\Preagonal.Scripting.GSAst\Preagonal.Scripting.GSAst.csproj" />
+		<ProjectReference Include="..\Preagonal.Scripting.GSAst\Preagonal.Scripting.GSAst.Grammar\Preagonal.Scripting.GSAst.Grammar.csproj" />
 	</ItemGroup>
 
 </Project>
