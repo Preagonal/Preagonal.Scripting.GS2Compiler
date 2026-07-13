@@ -1,4 +1,0 @@
-[submodule "Preagonal.Scripting.GSAst"]
-	path = Preagonal.Scripting.GSAst
-	url = https://github.com/Preagonal/Preagonal.Scripting.GSAst.git
-	branch = dev

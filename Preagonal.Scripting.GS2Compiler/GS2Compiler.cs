@@ -1721,6 +1721,13 @@ internal static class GS2Compiler
 					for (var i = call.Args.Count - 1; i >= 0; --i) Emit(call.Args[i]);
 					bytecode.Emit(Op.Format);
 					break;
+				case CallExpr call when SourceOrderFunctionCalls.Contains(call.Name):
+					bytecode.Emit(Op.TypeArray);
+					foreach (var arg in call.Args) Emit(arg);
+					bytecode.Emit(Op.TypeVar);
+					bytecode.EmitDynamicStringIndex(bytecode.GetString(call.Name));
+					bytecode.Emit(Op.Call);
+					break;
 				case CallExpr call:
 					bytecode.Emit(Op.TypeArray);
 					for (var i = call.Args.Count - 1; i >= 0; --i) Emit(call.Args[i]);
@@ -1736,7 +1743,7 @@ internal static class GS2Compiler
 					break;
 				case DynamicMethodCallExpr call:
 					bytecode.Emit(Op.TypeArray);
-					for (var i = call.Args.Count - 1; i >= 0; --i) Emit(call.Args[i]);
+					foreach (var arg in call.Args) Emit(arg);
 					Emit(call.Object);
 					if (NeedsObjectConversion(call.Object) || call.Object is ArrayIndexExpr) bytecode.Emit(Op.ConvToObject);
 					_dynamicMethodName = true;
@@ -1907,7 +1914,7 @@ internal static class GS2Compiler
 						break;
 					}
 					bytecode.Emit(Op.TypeArray);
-					for (var i = call.Args.Count - 1; i >= 0; --i) Emit(call.Args[i]);
+					foreach (var arg in call.Args) Emit(arg);
 					Emit(call.Object);
 					if (NeedsObjectConversion(call.Object) || call.Object is ArrayIndexExpr) bytecode.Emit(Op.ConvToObject);
 					bytecode.Emit(Op.TypeVar);
@@ -2048,6 +2055,30 @@ internal static class GS2Compiler
 			["pow"] = Op.Pow,
 			["getangle"] = Op.GetAngle,
 			["getdir"] = Op.GetDir,
+		};
+
+		private static readonly HashSet<string> SourceOrderFunctionCalls = new(StringComparer.OrdinalIgnoreCase)
+		{
+			"adventure_requestdownload",
+			"adventure_setaccountname",
+			"adventure_setnickname",
+			"adventure_setpassword",
+			"adventure_setserver",
+			"echo",
+			"enablefeatures",
+			"fileupdate",
+			"findimg",
+			"hideimg",
+			"gettextheight",
+			"gettextwidth",
+			"loadclass",
+			"onwall2",
+			"registerscript",
+			"showimg",
+			"showimg2",
+			"showstats",
+			"tiletype",
+			"triggerserver",
 		};
 
 		private static readonly HashSet<string> NonReturningBuiltInCalls = new(StringComparer.Ordinal)
