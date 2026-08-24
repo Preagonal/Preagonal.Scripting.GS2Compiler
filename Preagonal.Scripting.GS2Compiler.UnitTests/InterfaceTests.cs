@@ -786,6 +786,20 @@ public class InterfaceTests
 	}
 
 	[Fact]
+	public void CompileCode_Given_substring_without_length_When_called_Then_emits_negative_one_length()
+	{
+		//Arrange
+		const string scriptText = "function onCreated() { return \"abcdef\".substring(2); }";
+
+		//Act
+		var result = Interface.CompileCode(scriptText, withHeader: false);
+		var code = ReadBytecodeSegment(result.ByteCode);
+
+		//Assert
+		Assert.True(Contains([20, 0xF3, 0xFF, 115], code));
+	}
+
+	[Fact]
 	public void Given_pos_method_call_When_compiling_Then_object_pos_opcode_is_emitted()
 	{
 		const string scriptText =

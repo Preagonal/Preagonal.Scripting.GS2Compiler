@@ -1804,6 +1804,11 @@ internal static class GS2Compiler
 							Emit(arg);
 							if (!IsNumberExpr(arg)) bytecode.Emit(Op.ConvToFloat);
 						}
+						if (call.Args.Count == 1)
+						{
+							bytecode.Emit(Op.TypeNumber);
+							bytecode.EmitDynamicNumber(-1);
+						}
 						bytecode.Emit(Op.ObjSubstr);
 						break;
 					}
