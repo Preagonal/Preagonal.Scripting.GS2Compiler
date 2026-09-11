@@ -25,11 +25,14 @@
 	<ItemGroup>
 		<PackageReference Include="Antlr4.Runtime.Standard" Version="4.13.1" />
 		<PackageReference Include="Preagonal.Scripting.GSAst" Version="0.0.3" />
-		<PackageReference Include="Preagonal.Scripting.GSAst.Grammar" Version="0.0.3" />
 	</ItemGroup>
 
 	<ItemGroup>
 		<None Include="..\README.md" Pack="true" PackagePath="\" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\preagonal.scripting.gsast\Preagonal.Scripting.GSAst.Grammar\Preagonal.Scripting.GSAst.Grammar.csproj" />
 	</ItemGroup>
 
 </Project>

@@ -1,0 +1,5 @@
+//#CLIENTSIDE
+function z() { setimg a.png; setimg b.png; }
+function a() { setimg a.png; setimg b.png; setimg c.png; }
+function m() { setimg a.png; setimg b.png; setimg c.png; setimg d.png; }
+function n() { hideimg 1; hideimg 2; hideimg 3; hideimg 4; }

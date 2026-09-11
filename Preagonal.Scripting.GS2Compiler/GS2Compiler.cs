@@ -23,12 +23,16 @@ internal static class GS2Compiler
 		};
 		if (parseResult.ErrorMessage != null || parseResult.Program == null) return new() { Success = false, ErrMsg = parseResult.ErrorMessage ?? "malformed input\n", ByteCode = [] };
 		var program = parseResult.Program;
-		var bytecode = new BytecodeWriter(program.Gs1EventFlags);
-		var emitter = new Emitter(bytecode, program.Constants, program.Enums);
+		var bytecode = new BytecodeWriter(program.Gs1EventFlags, grammar);
+		var emitter = new Emitter(bytecode, program.Constants, program.Enums, grammar);
 		foreach (var item in program.Items)
 		{
 			if (item is FunctionItem function) emitter.EmitFunction(function.Function);
-			else if (item is StatementItem statement) emitter.EmitStatement(statement.Statement);
+			else if (item is StatementItem statement)
+			{
+				if (grammar == ScriptGrammar.GS1) bytecode.PatchPrejumps();
+				emitter.EmitStatement(statement.Statement);
+			}
 		}
 		var result = bytecode.ToArray();
 		return new() { Success = true, ErrMsg = null, ByteCode = withHeader ? Header.Wrap(result, type, name) : result };
@@ -583,7 +587,7 @@ internal static class GS2Compiler
 			private BinaryExpr BuildAssignmentStatement(GS1Parser.AssignmentStatementContext context)
 			{
 				if (context is not GS1Parser.StatementAssignmentContext assignment) throw Failure(context);
-				return new(BuildIdentifierAccess(assignment.identifier_access()), NormalizeOperator(assignment.assignment_operator().GetText()), BuildExpression(assignment.expression()));
+				return new(BuildIdentifierAccess(assignment.identifier_access(), true), NormalizeOperator(assignment.assignment_operator().GetText()), BuildExpression(assignment.expression()));
 			}
 
 			private ExprStmt BuildCommand(GS1Parser.BuiltinCommandStatementContext context)
@@ -591,10 +595,16 @@ internal static class GS2Compiler
 				if (context is not GS1Parser.StatementBuiltInCommandContext command) throw Failure(context);
 				var name = command.COMMAND().GetText().Trim();
 				var args = command.builtInCommandExpression().Select(BuildBuiltInCommandExpression).ToList();
-				if (name == "set" && args.Count > 0) return new(new BinaryExpr(args[0], "=", new BoolExpr(true)));
-				if (name == "unset" && args.Count > 0) return new(new BinaryExpr(args[0], "=", new BoolExpr(false)));
+				if (args.Count > 0) args[0] = TrimCommandArgument(args[0]);
+				if (name is "set" or "unset" && args.Count == 1)
+				{
+					var target = new DynamicVarExpr(new StringExpr(command.builtInCommandExpression(0).GetText().Trim()));
+					return new(new BinaryExpr(target, "=", name == "set" ? new NumberExpr("1") : new StringExpr("")));
+				}
 				return new(new CallExpr(name, args));
 			}
+
+			private static Expr TrimCommandArgument(Expr expression) => expression is StringExpr str ? new StringExpr(str.Value.TrimStart(' ', '\t')) : expression;
 
 			private Expr BuildBuiltInCommandExpression(GS1Parser.BuiltInCommandExpressionContext context)
 			{
@@ -612,7 +622,8 @@ internal static class GS2Compiler
 			private Expr BuildExpression(GS1Parser.ExpressionContext context)
 			{
 				if (context is not GS1Parser.ExpressionTernaryContext ternary) throw Failure(context);
-				var expression = BuildLogicalOr(ternary.logicalOrExpression());
+				if (ternary.legacyEqualityExpression() is not GS1Parser.ExpressionLegacyEqualityContext equality) throw Failure(context);
+				var expression = BuildBinaryChain(equality, equality.logicalOrExpression(), BuildLogicalOr);
 				var branches = ternary.expression();
 				for (var i = 0; i + 1 < branches.Length; i += 2)
 					expression = new TernaryExpr(expression, BuildExpression(branches[i]), BuildExpression(branches[i + 1]));
@@ -713,18 +724,34 @@ internal static class GS2Compiler
 				throw Failure(context);
 			}
 
-			private CallExpr BuildBuiltInFunction(GS1Parser.Builtin_functionContext context)
+			private Expr BuildBuiltInFunction(GS1Parser.Builtin_functionContext context)
 			{
 				if (context is not GS1Parser.BuiltInFunctionCallContext call) throw Failure(context);
-				return new(call.FUNCTION().GetText(), call.expression().Select(BuildExpression).ToList());
+				var args = call.expression().Select(BuildExpression).ToList();
+				if (call.FUNCTION().GetText() == "strequals" && args.Count == 2)
+				{
+					for (var i = 0; i < args.Count; ++i)
+						if (args[i] is StringExpr { Value: "#w" }) args[i] = new MemberExpr(new MemberExpr(new IdentifierExpr("player"), "weapon"), "name");
+					return new BinaryExpr(args[0], "==", args[1]);
+				}
+				if (call.FUNCTION().GetText() == "hasweapon") return new BinaryExpr(new CallExpr("findweapon", args), "!=", new NullExpr());
+				var name = NormalizeBuiltInFunctionName(call.FUNCTION().GetText());
+				if (name == "int" && args.Count == 1) return new CastExpr("int", args[0]);
+				return new CallExpr(name, args);
 			}
 
-			private Expr BuildIdentifierAccess(GS1Parser.Identifier_accessContext context)
+			private static string NormalizeBuiltInFunctionName(string name) => name switch
+			{
+				"hasweapon" => "findweapon",
+				_ => name,
+			};
+
+			private Expr BuildIdentifierAccess(GS1Parser.Identifier_accessContext context, bool assignmentTarget = false)
 			{
 				if (context is not GS1Parser.IdentifierAccessContext access) throw Failure(context);
 				var values = access.identifier_value();
 				var (name, indices) = BuildIdentifierValue(values[0]);
-				var expression = BuildDottedIdentifier(name, indices);
+				var expression = BuildDottedIdentifier(name, indices, assignmentTarget && values.Length == 1);
 				for (var i = 1; i < values.Length; ++i)
 				{
 					(name, indices) = BuildIdentifierValue(values[i]);
@@ -739,8 +766,18 @@ internal static class GS2Compiler
 				return (value.compound_identifier().GetText(), value.expression().Select(BuildExpression).ToList());
 			}
 
-			private static Expr BuildDottedIdentifier(string name, List<Expr> indices)
+			private static Expr BuildDottedIdentifier(string name, List<Expr> indices, bool assignmentTarget)
 			{
+				var playerMember = name switch
+				{
+					"playerx" => "x",
+					"playery" => "y",
+					"playerdir" => "dir",
+					"playerbombs" => "bombs",
+					_ => null,
+				};
+				if (playerMember != null) return ApplyIndices(new MemberExpr(new IdentifierExpr("player"), playerMember), indices);
+				if (!assignmentTarget && indices.Count == 0 && name == "timeout") name = "istimeout";
 				var parts = name.Split('.', StringSplitOptions.RemoveEmptyEntries);
 				if (parts.Length == 0) return ApplyIndices(new IdentifierExpr(name), indices);
 				Expr expression = new IdentifierExpr(parts[0]);
@@ -972,7 +1009,8 @@ internal static class GS2Compiler
 	private sealed class Emitter(
 		BytecodeWriter bytecode,
 		Dictionary<string, Expr> constants,
-		Dictionary<string, Dictionary<string, int>> enums
+		Dictionary<string, Dictionary<string, int>> enums,
+		ScriptGrammar grammar
 	)
 	{
 		private readonly Stack<List<int>>                            _breakPatches            = new();
@@ -981,6 +1019,7 @@ internal static class GS2Compiler
 		private readonly Stack<List<int>>                            _conditionSuccessPatches = new();
 		private readonly Dictionary<string, string>                  _negativeFloatText       = new(StringComparer.Ordinal);
 		private readonly Stack<HashSet<string>>                      _tempAliases             = new();
+		private readonly Stack<Dictionary<string, int>>              _cachedCalls             = new();
 		// Labels aren't lexically nested within a function the way loops are, so each function
 		// just gets one flat dictionary - but a lambda expression triggers a nested EmitFunction
 		// call while the enclosing function's emission is still in progress (see the LambdaExpr
@@ -1009,7 +1048,23 @@ internal static class GS2Compiler
 			bytecode.Emit(Op.FuncParamsEnd);
 			bytecode.Emit(Op.Jmp);
 			if (node.Body.Exists(ContainsCall)) bytecode.Emit(Op.CmdCall);
+			var cachedCalls = grammar == ScriptGrammar.GS1
+				? StatementCalls(node.Body).GroupBy(name => name, StringComparer.Ordinal)
+					.Where(group => group.Count() >= 5 && !BuiltInCalls.ContainsKey(group.Key) && !NonReversedBuiltInCalls.ContainsKey(group.Key) && group.Key is not ("arraylen" or "sarraylen" or "waitfor" or "sleep" or "setarray" or "makevar" or "format"))
+					.Select((group, index) => (group.Key, Index: index)).ToDictionary(pair => pair.Key, pair => pair.Index, StringComparer.Ordinal)
+				: new Dictionary<string, int>(StringComparer.Ordinal);
+			_cachedCalls.Push(cachedCalls);
+			foreach (var (name, index) in cachedCalls)
+			{
+				bytecode.Emit(Op.TypeVar);
+				bytecode.EmitDynamicStringIndex(bytecode.GetString(name));
+				bytecode.Emit(Op.ResolveVar);
+				bytecode.Emit(Op.StoreRegister);
+				bytecode.EmitNumberOperand(index);
+				bytecode.Emit(Op.IndexDec);
+			}
 			foreach (var statement in node.Body) EmitStatement(statement);
+			_cachedCalls.Pop();
 			var unresolvedGotoPatches = _pendingGotoPatches.Pop();
 			_labelAddresses.Pop();
 			if (unresolvedGotoPatches.Count > 0) throw new InvalidOperationException($"goto to undefined label(s) in function '{functionName}': {string.Join(", ", unresolvedGotoPatches.Keys)}");
@@ -1031,6 +1086,24 @@ internal static class GS2Compiler
 		public void EmitTopLevel(List<Stmt> statements)
 		{
 			foreach (var statement in statements) EmitStatement(statement);
+		}
+
+		private static IEnumerable<string> StatementCalls(IEnumerable<Stmt> statements)
+		{
+			foreach (var statement in statements)
+			{
+				if (statement is ExprStmt { Expression: CallExpr call }) yield return call.Name;
+				IEnumerable<Stmt> children = statement switch
+				{
+					BlockStmt block => block.Body,
+					IfStmt conditional => conditional.ThenBody.Concat(conditional.ElseBody),
+					ForStmt loop => loop.Body,
+					WhileStmt loop => loop.Body,
+					WithStmt withStatement => withStatement.Body,
+					_ => [],
+				};
+				foreach (var name in StatementCalls(children)) yield return name;
+			}
 		}
 
 		private static bool DefinitelyReturns(Stmt statement) => statement switch
@@ -1401,8 +1474,9 @@ internal static class GS2Compiler
 					}
 					var passNegatedControlAnd = controlLogical && logical.Left is UnaryExpr { Op: "!", Expression: BinaryExpr { Op: "&&" } };
 					var leftPatchOffset = logical.Left is BinaryExpr { Op: "&&" or "||" } ? (controlLogical || negatedLogical) && logical.Op == "||" ? 6 : logical.Op == "&&" && logical.Left is BinaryExpr { Op: "||" } ? 0 : 1 : 0;
-					Emit(logical.Left, false, false, leftPatchOffset, controlLogical, negatedLogical, true, passNegatedControlAnd);
-					if (!IsBooleanExpr(logical.Left)) bytecode.Emit(Op.ConvToFloat);
+					var valueOnLeft = grammar == ScriptGrammar.GS1 && logical.Op == "||" && logical.Left is BinaryExpr { Op: "&&" };
+					Emit(logical.Left, false, false, valueOnLeft ? 0 : leftPatchOffset, controlLogical && !valueOnLeft, negatedLogical, true, passNegatedControlAnd);
+					if (!IsBooleanExpr(logical.Left) && (grammar != ScriptGrammar.GS1 || NeedsNumericConversion(logical.Left))) bytecode.Emit(Op.ConvToFloat);
 					if (localSuccessPatches != null)
 					{
 						for (var i = localSuccessStart; i < localSuccessPatches.Count; ++i) bytecode.PatchShort(localSuccessPatches[i], bytecode.OpIndex);
@@ -1416,7 +1490,7 @@ internal static class GS2Compiler
 					bytecode.Emit(logical.Op == "&&" && controlLogical ? Op.If : logical.Op == "&&" ? Op.And : Op.Or);
 					var loc = bytecode.EmitNumberOperandPlaceholder();
 					Emit(logical.Right, false, false, 0, controlLogical, negatedLogical);
-					if (!IsBooleanExpr(logical.Right)) bytecode.Emit(Op.ConvToFloat);
+					if (!IsBooleanExpr(logical.Right) && (grammar != ScriptGrammar.GS1 || NeedsNumericConversion(logical.Right))) bytecode.Emit(Op.ConvToFloat);
 					if (logicalInline) bytecode.Emit(Op.InlineConditional);
 					if (logical.Op == "&&" && controlLogical && _conditionFailPatches.Count > 0) _conditionFailPatches.Peek().Add(loc);
 					else if (logical.Op == "||" && controlLogical && _conditionSuccessPatches.Count > 0) _conditionSuccessPatches.Peek().Add(loc);
@@ -1539,7 +1613,12 @@ internal static class GS2Compiler
 					EmitMultiArrayIndex(index, false);
 					break;
 				case DynamicVarExpr dynamicVar:
-					Emit(new CallExpr("makevar", [dynamicVar.Name]));
+					if (grammar == ScriptGrammar.GS1)
+					{
+						Emit(dynamicVar.Name);
+						bytecode.Emit(Op.ObjFromString);
+					}
+					else Emit(new CallExpr("makevar", [dynamicVar.Name]));
 					break;
 				case IdentifierExpr id when constants.TryGetValue(id.Name, out var constant):
 					Emit(constant);
@@ -1724,8 +1803,16 @@ internal static class GS2Compiler
 				case CallExpr call:
 					bytecode.Emit(Op.TypeArray);
 					for (var i = call.Args.Count - 1; i >= 0; --i) Emit(call.Args[i]);
-					bytecode.Emit(Op.TypeVar);
-					bytecode.EmitDynamicStringIndex(bytecode.GetString(call.Name));
+					if (_cachedCalls.TryPeek(out var cachedCalls) && cachedCalls.TryGetValue(call.Name, out var register))
+					{
+						bytecode.Emit(Op.LoadRegister);
+						bytecode.EmitNumberOperand(register);
+					}
+					else
+					{
+						bytecode.Emit(Op.TypeVar);
+						bytecode.EmitDynamicStringIndex(bytecode.GetString(call.Name));
+					}
 					bytecode.Emit(Op.Call);
 					break;
 				case ChainedCallExpr call:
@@ -2344,6 +2431,7 @@ internal static class GS2Compiler
 	private sealed class BytecodeWriter
 	{
 		private readonly int _gs1EventFlags;
+		private readonly ScriptGrammar _grammar;
 		private readonly List<byte> _code = [];
 		private readonly List<string> _strings = [];
 		private readonly Dictionary<string, int> _stringIndex = new(StringComparer.Ordinal);
@@ -2353,7 +2441,11 @@ internal static class GS2Compiler
 		private Op _lastOp = Op.None;
 		public int OpIndex { get; private set; }
 
-		public BytecodeWriter(int gs1EventFlags) => _gs1EventFlags = gs1EventFlags;
+		public BytecodeWriter(int gs1EventFlags, ScriptGrammar grammar)
+		{
+			_gs1EventFlags = gs1EventFlags;
+			_grammar = grammar;
+		}
 
 		public int GetString(string value)
 		{
@@ -2372,6 +2464,12 @@ internal static class GS2Compiler
 		}
 
 		public void AddPrejumpPatch(int pos) => _prejumpPatches.Add(pos);
+
+		public void PatchPrejumps()
+		{
+			foreach (var loc in _prejumpPatches) PatchShort(loc, OpIndex);
+			_prejumpPatches.Clear();
+		}
 
 		public void Emit(Op op)
 		{
@@ -2423,8 +2521,9 @@ internal static class GS2Compiler
 
 		public byte[] ToArray()
 		{
-			Emit(Op.Ret);
-			foreach (var loc in _prejumpPatches) PatchShort(loc, OpIndex);
+			PatchPrejumps();
+			RedirectSetIndexTargets();
+			MinimizeDynamicNumbers();
 			List<byte> result = [];
 			List<byte> gs1EventFlags = [];
 			WriteInt(gs1EventFlags, _gs1EventFlags);
@@ -2440,15 +2539,170 @@ internal static class GS2Compiler
 			foreach (var str in _strings) WriteCString(strings, str);
 			WriteSegment(result, BytecodeSegment.Strings, strings);
 			WriteSegment(result, BytecodeSegment.Bytecode, _code);
-			result.Add(10);
 			return [.. result];
+		}
+
+		private void RedirectSetIndexTargets()
+		{
+			var instructions = ReadInstructions();
+			var byOpIndex = instructions.ToDictionary(instruction => instruction.OpIndex);
+			foreach (var instruction in instructions.OrderByDescending(instruction => instruction.Offset))
+			{
+				if (!(IsTargetInstruction(instruction.Op) || _grammar == ScriptGrammar.GS1 && instruction.Op == Op.SetIndex) || instruction.OperandOffset == null || instruction.OperandValue == null) continue;
+				var target = ResolveSetIndexTarget(instruction.OperandValue.Value, byOpIndex, _grammar == ScriptGrammar.GS1 ? instruction.Op : Op.None);
+				if (target == instruction.OperandValue.Value) continue;
+				WriteDynamicNumber(instruction.OperandOffset.Value, target);
+			}
+		}
+
+		private static int ResolveSetIndexTarget(int target, Dictionary<int, Instruction> instructions, Op sourceOp)
+		{
+			HashSet<int> visited = [];
+			while (visited.Add(target) &&
+			       instructions.TryGetValue(target, out var instruction) &&
+			       instruction.OperandValue is { } nextTarget &&
+			       (instruction.Op == Op.SetIndex || sourceOp == Op.Or && instruction.Op == Op.Or))
+			{
+				target = nextTarget;
+			}
+			return target;
+		}
+
+		private List<Instruction> ReadInstructions()
+		{
+			List<Instruction> instructions = [];
+			var offset = 0;
+			var opIndex = 0;
+			while (offset < _code.Count)
+			{
+				var instructionOffset = offset;
+				var op = (Op)_code[offset++];
+				int? operandOffset = null;
+				int? operandValue = null;
+				if (HasDynamicOperand(op) && offset < _code.Count)
+				{
+					operandOffset = offset;
+					var (value, length) = ReadDynamicOperand(offset);
+					if (length > 0)
+					{
+						operandValue = value;
+						offset += length;
+					}
+				}
+				instructions.Add(new(opIndex++, instructionOffset, op, operandOffset, operandValue));
+			}
+			return instructions;
+		}
+
+		private (int? Value, int Length) ReadDynamicOperand(int offset) => _code[offset] switch
+		{
+			0xF0 or 0xF3 => ((sbyte)_code[offset + 1], 2),
+			0xF1 or 0xF4 => ((short)((_code[offset + 1] << 8) | _code[offset + 2]), 3),
+			0xF2 or 0xF5 => (((int)_code[offset + 1] << 24) | (_code[offset + 2] << 16) | (_code[offset + 3] << 8) | _code[offset + 4], 5),
+			0xF6 => (null, DynamicStringLength(offset)),
+			_ => (null, 0),
+		};
+
+		private int DynamicStringLength(int offset)
+		{
+			var end = offset + 1;
+			while (end < _code.Count && _code[end++] != 0) { }
+			return end - offset;
+		}
+
+		private void WriteDynamicNumber(int offset, int value)
+		{
+			if (value < short.MinValue || value > short.MaxValue) throw new InvalidOperationException("bytecode jump target is out of range");
+			if (_code[offset] == 0xF3)
+			{
+				_code[offset] = 0xF4;
+				_code.Insert(offset + 1, 0);
+			}
+			else if (_code[offset] != 0xF4) _code[offset] = 0xF4;
+			PatchShort(offset + 1, value);
+		}
+
+		private static bool HasDynamicOperand(Op op) => op is Op.SetIndex or Op.SetIndexTrue or Op.Or or Op.If or Op.And or Op.TypeNumber or Op.TypeString or Op.TypeVar or Op.StoreRegister or Op.LoadRegister;
+
+		private static bool IsTargetInstruction(Op op) => op is Op.SetIndexTrue or Op.Or or Op.If or Op.And;
+
+		private void MinimizeDynamicNumbers()
+		{
+			var i = 0;
+			while (i < _code.Count)
+			{
+				switch (_code[i])
+				{
+					case 0xF0 or 0xF3:
+						i += 2;
+						break;
+					case 0xF1:
+						i += 3;
+						break;
+					case 0xF4:
+					{
+						var value = (short)((_code[i + 1] << 8) | _code[i + 2]);
+						if (value >= sbyte.MinValue && value <= sbyte.MaxValue)
+						{
+							_code[i] = 0xF3;
+							_code[i + 1] = unchecked((byte)(sbyte)value);
+							_code.RemoveAt(i + 2);
+							i += 2;
+						}
+						else i += 3;
+						break;
+					}
+					case 0xF2 or 0xF5:
+						i += 5;
+						break;
+					case 0xF6:
+						i++;
+						while (i < _code.Count && _code[i++] != 0) { }
+						break;
+					default:
+						i++;
+						break;
+				}
+			}
 		}
 
 		private IEnumerable<FunctionEntry> OrderedFunctions()
 		{
+			if (_grammar == ScriptGrammar.GS1)
+			{
+				// Native THashList starts at 32 buckets, grows eightfold, and prepends collisions.
+				var buckets = Enumerable.Range(0, 32).Select(_ => new List<FunctionEntry>()).ToArray();
+				var count = 0;
+				foreach (var function in _functions)
+				{
+					if (count == buckets.Length)
+					{
+						var previous = buckets;
+						buckets = Enumerable.Range(0, previous.Length * 8).Select(_ => new List<FunctionEntry>()).ToArray();
+						foreach (var entry in previous.SelectMany(bucket => bucket))
+							buckets[GraalNameHash(entry.Name) & (uint)(buckets.Length - 1)].Insert(0, entry);
+					}
+					buckets[GraalNameHash(function.Name) & (uint)(buckets.Length - 1)].Insert(0, function);
+					count++;
+				}
+				foreach (var entry in buckets.SelectMany(bucket => bucket)) yield return entry;
+				yield break;
+			}
 			HashSet<string> emitted = new(StringComparer.Ordinal);
 			foreach (var fn in _strings.SelectMany(str => _functions.Where(fn => fn.Name == str && emitted.Add(fn.Name)))) yield return fn;
 			foreach (var fn in _functions.Where(fn => emitted.Add(fn.Name))) yield return fn;
+		}
+
+		[System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+		private static uint GraalNameHash(string name)
+		{
+			var hash = 0x1505u;
+			foreach (var value in Encoding.UTF8.GetBytes(name))
+			{
+				var character = value is >= (byte)'A' and <= (byte)'Z' ? value + 32 : (int)(sbyte)value;
+				hash = unchecked(hash * 17 ^ (uint)character);
+			}
+			return hash;
 		}
 
 		private static void WriteSegment(List<byte> target, BytecodeSegment type, List<byte> bytes)
@@ -2491,6 +2745,7 @@ internal static class GS2Compiler
 		}
 	}
 
+	private sealed record Instruction(int OpIndex, int Offset, Op Op, int? OperandOffset, int? OperandValue);
 	private sealed record FunctionEntry(string Name, int OpIndex, int JmpLoc);
 	private enum ExprType { Unknown, Number, String, Array, Object }
 
@@ -2527,6 +2782,10 @@ internal static class GS2Compiler
 		InlineNew = 40,
 		MakeVar = 41,
 		NewObject = 42,
+		ObjFromString = 43,
+		StoreRegister = 45,
+		LoadRegister = 46,
+		ResolveVar = 47,
 		Assign = 50,
 		FuncParamsEnd = 51,
 		Inc = 52,

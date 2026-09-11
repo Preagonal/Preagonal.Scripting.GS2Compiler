@@ -1,0 +1,124 @@
+//#CLIENTSIDE
+if(created&&isweapon){
+resetimg();
+}
+if (!isweapon){
+if(playerenters || hasweapon(*Bomb)&&playerendsreading){
+hidelocal;
+}
+if((playerenters&&(hasweapon(Bomb)||hasweapon(-BombAndBowUpdater)))
+|| (playertouchsother&&tne2gotbomb)){
+if (tne2gotbomb) {
+play chest.wav;
+unset tne2gotbomb;
+say 9;
+showlocal;
+}
+toweapons *Bomb;
+}
+}
+if(weaponfired&&playerbombs>0){
+x=playerx+0.5;
+y=playery+1;
+if(playerdir=0) y-=2;
+else if(playerdir=1) x-=2;
+else if(playerdir=2) y+=2;
+else x+=2;
+if(playerbombs>0){
+if(this.bomb=2&&this.charge>=2){
+playerbombs--;
+putbomb 2,x,y;
+this.charge=0;
+}else if(this.charge>=1){
+playerbombs--;
+if(this.bomb=1&&havebomblvl3) putbomb 3,x,y;
+else putbomb 1,x,y;
+this.charge=0;
+}
+}
+shutdown();
+}
+if (weaponselected) {
+resetimg();
+timeout = 0.05;
+}
+if(timeout){
+if(havebomblvl2) this.maxcharge=2;
+else this.maxcharge=1;
+if(strequals(#w,*Bomb)){
+if(keydown(6)){
+if(this.adown<1){
+this.adown=1;
+nextimg();
+}
+}else this.adown=0;
+if(this.charge<this.maxcharge){
+this.y=(32*(((this.charge)%1)+0.1));
+if(this.y>32) this.y=32;
+if(this.charge=2) hideimg 401;
+if(this.charge>1){
+showimg 401,wbomb2o.png,170,61-this.y;
+changeimgpart 401,0,32-this.y,32,this.y;
+}else{
+if(havebomblvl3&&this.bomb=1) showimg 401,wbomb3.png,170,61-this.y;
+else showimg 401,wbomb1.png,170,61-this.y;
+changeimgpart 401,0,32-this.y,32,this.y;
+}
+changeimgvis 401,4;
+this.charge+=0.1;
+}
+if(this.charge=int(this.charge)){
+resetimg();
+}
+timeout=0.05;
+}else{
+this.charge = 99;
+shutdown();
+this.charge = 0;
+}
+}
+function nextimg(){
+this.bomb=(this.bomb+1)%3;
+if((this.bomb=1&&!havebomblvl3)||(this.bomb=2&&!havebomblvl2)) nextimg();
+else resetimg();
+}
+function resetimg(){
+if(this.bomb=2){
+if(this.charge>=2&&playerbombs>0){
+setimg wbomb2.png;
+}else{
+setimg wbomb2d.png;
+}
+}else if(this.charge>=1&&playerbombs>0){
+if(havebomblvl3&&this.bomb=1) setimg wbomb3.png;
+else setimg wbomb1.png;
+}else{
+if(havebomblvl3&&this.bomb=1) setimg wbomb3d.png;
+else setimg wbomb1d.png;
+}
+hideimg 401;
+}
+if(playerenters&&this.charge<=0) shutdown();
+function shutdown(){
+if(isweapon) resetimg();
+hideimg 401;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

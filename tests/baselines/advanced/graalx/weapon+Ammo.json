@@ -1,11 +1,11 @@
 {
-  "bytecode_hash": "cda87d77e979f3267e60578c892574b5c3a37ff091c6066d4c91f8f2474eafc2",
-  "bytecode_size": 324,
+  "bytecode_hash": "221b92133049a25dd8bea0cbb8ff769e446e29cdacd5124cadf9b8e44f594452",
+  "bytecode_size": 319,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
-    "script_path": "advanced/graalx/weapon+Ammo.gs2",
+    "script_path": "advanced/graalx/weapon\u002BAmmo.gs2",
     "generated_at": "2026-01-04 18:39:05",
     "compiler_version": "modified_1767569912"
   }

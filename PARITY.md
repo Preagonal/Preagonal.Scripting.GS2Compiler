@@ -5,6 +5,17 @@ Current advanced fixture score: 155 / 155 byte-for-byte hashes, 155 / 155 byte s
 Locked direct builtins:
 - `setarray(object, size)` emits `OP_SETARRAY` (`39`) directly and does not add `setarray` to the string table.
 
+GS1 weapon parity:
+- `weapons_to_test/weaponHilt.txt` matches official GS2 bytecode byte-for-byte and is locked by `Given_official_accepted_gs1_hilt_weapon_script_When_compiling_with_gs1_grammar_Then_bytecode_matches_official`.
+- `weapons_to_test/weapon%042Bomb.txt` matches all 1,890 official bytes, including event flags `0x85`. Locked by `Gs1WeaponParityTests` and `tests/gs1-weapons/weapon%042Bomb.*`.
+
+GS1 corpus workflow:
+- Use only the globally registered headless MCP session, with `type: weapon`.
+- Extract the body between `SCRIPT` and `SCRIPTEND`; prepend `//#CLIENTSIDE` when missing before sending the same source to both compilers.
+- Process one weapon at a time, in ordinal filename order, skipping already locked matches. Do not advance past a mismatch until exact byte parity and regression tests are in place.
+- Keep official rejections separate from compiler mismatches. Valid GS1 unsupported by the official compiler should remain supported here.
+- Current checkpoint: Hilt and `%042Bomb` locked; next weapon is `weapon%042Bow.txt`.
+
 Locked advanced parity fixtures:
 - `tests/scripts/advanced/g2k1/weaponApple Seeds.gs2`
 - `tests/scripts/advanced/g2k1/weaponBasket.gs2`
