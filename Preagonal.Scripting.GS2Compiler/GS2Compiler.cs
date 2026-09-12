@@ -598,6 +598,9 @@ internal static class GS2Compiler
 		private readonly Stack<List<int>> _conditionFailPatches = new();
 		private readonly Stack<List<int>> _conditionSuccessPatches = new();
 		private readonly Dictionary<string, string> _negativeFloatText = new(StringComparer.Ordinal);
+		private readonly Dictionary<string, int> _registerSlots = new(StringComparer.Ordinal);
+		private readonly List<string> _registerOrder = new();
+		private List<int>? _deferredLogicalPatches;
 		private int _newObjectCount;
 		private bool _dynamicMethodName;
 
@@ -610,31 +613,47 @@ internal static class GS2Compiler
 
 		public void EmitFunction(FunctionNode node, bool patchToFinal = true)
 		{
-			_bytecode.Emit(Op.SetIndex);
-			var jmpLoc = _bytecode.EmitNumberOperandPlaceholder();
-			var functionName = node.Public ? "public." : "";
-			if (!string.IsNullOrEmpty(node.ObjectName)) functionName += node.ObjectName + ".";
-			functionName += node.Name;
-			if (node.ObjectName == "universe") functionName = (node.Public ? "public." : "") + node.Name + "," + functionName;
-			var addedFunction = _bytecode.AddFunction(functionName, _bytecode.OpIndex, 0);
-			_bytecode.Emit(Op.TypeArray);
-			for (var i = node.Args.Count - 1; i >= 0; --i) Emit(node.Args[i]);
-			_bytecode.Emit(Op.FuncParamsEnd);
-			_bytecode.Emit(Op.Jmp);
-			if (node.Body.Exists(ContainsCall)) _bytecode.Emit(Op.CmdCall);
-			foreach (var statement in node.Body) EmitStatement(statement);
-			var lastStatement = LastMeaningfulStatement(node.Body);
-			if (node.Name != "getPreviewSpriteCount" && (lastStatement == null || !DefinitelyReturns(lastStatement)))
+			var savedSlots = new Dictionary<string, int>(_registerSlots, StringComparer.Ordinal);
+			var savedOrder = new List<string>(_registerOrder);
+			_registerSlots.Clear();
+			_registerOrder.Clear();
+			try
 			{
-				_bytecode.Emit(Op.TypeNumber);
-				_bytecode.EmitDynamicNumber(0);
-				_bytecode.Emit(Op.Ret);
+				_bytecode.Emit(Op.SetIndex);
+				var jmpLoc = _bytecode.EmitNumberOperandPlaceholder();
+				var functionName = node.Public ? "public." : "";
+				if (!string.IsNullOrEmpty(node.ObjectName)) functionName += node.ObjectName + ".";
+				functionName += node.Name;
+				if (node.ObjectName == "universe") functionName = (node.Public ? "public." : "") + node.Name + "," + functionName;
+				var addedFunction = _bytecode.AddFunction(functionName, _bytecode.OpIndex, 0);
+				_bytecode.Emit(Op.TypeArray);
+				for (var i = node.Args.Count - 1; i >= 0; --i) Emit(node.Args[i]);
+				_bytecode.Emit(Op.FuncParamsEnd);
+				_bytecode.Emit(Op.Jmp);
+				if (node.Body.Exists(ContainsCall)) _bytecode.Emit(Op.CmdCall);
+				AllocateRegisters(node.Body);
+				EmitRegisterPrologue();
+				foreach (var statement in node.Body) EmitStatement(statement);
+				var lastStatement = LastMeaningfulStatement(node.Body);
+				if (node.Name != "getPreviewSpriteCount" && (lastStatement == null || !DefinitelyReturns(lastStatement)))
+				{
+					_bytecode.Emit(Op.TypeNumber);
+					_bytecode.EmitDynamicNumber(0);
+					_bytecode.Emit(Op.Ret);
+				}
+				if (patchToFinal)
+				{
+					if (addedFunction) _bytecode.AddPrejumpPatch(jmpLoc);
+				}
+				else _bytecode.PatchShort(jmpLoc, _bytecode.OpIndex);
 			}
-			if (patchToFinal)
+			finally
 			{
-				if (addedFunction) _bytecode.AddPrejumpPatch(jmpLoc);
+				_registerSlots.Clear();
+				foreach (var kvp in savedSlots) _registerSlots[kvp.Key] = kvp.Value;
+				_registerOrder.Clear();
+				_registerOrder.AddRange(savedOrder);
 			}
-			else _bytecode.PatchShort(jmpLoc, _bytecode.OpIndex);
 		}
 
 		public void EmitTopLevel(List<Stmt> statements)
@@ -658,6 +677,238 @@ internal static class GS2Compiler
 			for (var i = body.Count - 1; i >= 0; --i)
 				if (body[i] is not BlockStmt { Body.Count: 0 }) return body[i];
 			return null;
+		}
+
+		private void AllocateRegisters(List<Stmt> body)
+		{
+			var order = new List<string>();
+			var seen = new HashSet<string>(StringComparer.Ordinal);
+			var assignCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+			var assignedInLoop = new HashSet<string>(StringComparer.Ordinal);
+			var loopVars = new HashSet<string>(StringComparer.Ordinal);
+			var foreachSources = new HashSet<string>(StringComparer.Ordinal);
+
+			void NoteVar(string name)
+			{
+				if (seen.Add(name)) order.Add(name);
+			}
+
+			void NoteAssign(string name, bool inLoop)
+			{
+				NoteVar(name);
+				assignCounts[name] = assignCounts.TryGetValue(name, out var c) ? c + 1 : 1;
+				if (inLoop) assignedInLoop.Add(name);
+			}
+
+			void CollectExpr(Expr expr, bool inLoop)
+			{
+				switch (expr)
+				{
+					case BinaryExpr binary:
+						var isAssign = binary.Op is "=" or "+=" or "-=" or "*=" or "/=" or "%=" or "^=" or "@=" or "<<=" or ">>=";
+						if (isAssign && binary.Left is MemberExpr { Object: IdentifierExpr { Name: "temp" }, Name: var targetName })
+						{
+							CollectExpr(binary.Right, inLoop);
+							NoteAssign(targetName, inLoop);
+						}
+						else
+						{
+							CollectExpr(binary.Right, inLoop);
+							CollectExpr(binary.Left, inLoop);
+						}
+						break;
+					case UnaryExpr unary when unary.Op is "++" or "--" && unary.Expression is MemberExpr { Object: IdentifierExpr { Name: "temp" }, Name: var unaryName }:
+						NoteAssign(unaryName, inLoop);
+						break;
+					case UnaryExpr unary:
+						CollectExpr(unary.Expression, inLoop);
+						break;
+					case TernaryExpr ternary:
+						CollectExpr(ternary.WhenFalse, inLoop);
+						CollectExpr(ternary.WhenTrue, inLoop);
+						CollectExpr(ternary.Condition, inLoop);
+						break;
+					case InExpr inExpr:
+						if (inExpr.Upper != null) CollectExpr(inExpr.Upper, inLoop);
+						CollectExpr(inExpr.Lower, inLoop);
+						CollectExpr(inExpr.Expression, inLoop);
+						break;
+					case MemberExpr { Object: IdentifierExpr { Name: "temp" }, Name: var memberName }:
+						NoteVar(memberName);
+						break;
+					case MemberExpr member:
+						CollectExpr(member.Object, inLoop);
+						break;
+					case DynamicMemberExpr dynamicMember:
+						CollectExpr(dynamicMember.Name, inLoop);
+						CollectExpr(dynamicMember.Object, inLoop);
+						break;
+					case DynamicVarExpr dynamicVar:
+						CollectExpr(dynamicVar.Name, inLoop);
+						break;
+					case ArrayIndexExpr index:
+						CollectExpr(index.Index, inLoop);
+						CollectExpr(index.Target, inLoop);
+						break;
+					case MultiArrayIndexExpr multiIndex:
+						for (var i = multiIndex.Indices.Count - 1; i >= 0; --i) CollectExpr(multiIndex.Indices[i], inLoop);
+						CollectExpr(multiIndex.Target, inLoop);
+						break;
+					case CallExpr call:
+						for (var i = call.Args.Count - 1; i >= 0; --i) CollectExpr(call.Args[i], inLoop);
+						break;
+					case ChainedCallExpr chained:
+						for (var i = chained.Args.Count - 1; i >= 0; --i) CollectExpr(chained.Args[i], inLoop);
+						CollectExpr(chained.Call, inLoop);
+						break;
+					case MethodCallExpr methodCall:
+						for (var i = methodCall.Args.Count - 1; i >= 0; --i) CollectExpr(methodCall.Args[i], inLoop);
+						CollectExpr(methodCall.Object, inLoop);
+						break;
+					case DynamicMethodCallExpr dynamicMethodCall:
+						for (var i = dynamicMethodCall.Args.Count - 1; i >= 0; --i) CollectExpr(dynamicMethodCall.Args[i], inLoop);
+						CollectExpr(dynamicMethodCall.Name, inLoop);
+						CollectExpr(dynamicMethodCall.Object, inLoop);
+						break;
+					case NewObjectExpr newObject:
+						for (var i = newObject.Args.Count - 1; i >= 0; --i) CollectExpr(newObject.Args[i], inLoop);
+						break;
+					case NewArrayExpr newArray:
+						for (var i = newArray.Dimensions.Count - 1; i >= 0; --i) CollectExpr(newArray.Dimensions[i], inLoop);
+						break;
+					case ArrayLiteralExpr arrayLiteral:
+						for (var i = arrayLiteral.Values.Count - 1; i >= 0; --i) CollectExpr(arrayLiteral.Values[i], inLoop);
+						break;
+					case LambdaExpr:
+						// Lambda bodies are emitted as separate functions with their own
+						// register allocation; their locals must not leak into the outer
+						// function's allocation state.
+						break;
+					case StringCastExpr stringCast:
+						CollectExpr(stringCast.Expression, inLoop);
+						break;
+					case CastExpr cast:
+						CollectExpr(cast.Expression, inLoop);
+						break;
+				}
+			}
+
+			void CollectStmts(List<Stmt> stmts, bool inLoop)
+			{
+				if (inLoop)
+				{
+					for (var i = stmts.Count - 1; i >= 0; --i)
+						if (stmts[i] is ForStmt or ForEachStmt or WhileStmt) CollectStmt(stmts[i], inLoop);
+					for (var i = stmts.Count - 1; i >= 0; --i)
+						if (stmts[i] is not (ForStmt or ForEachStmt or WhileStmt)) CollectStmt(stmts[i], inLoop);
+				}
+				else
+				{
+					for (var i = stmts.Count - 1; i >= 0; --i) CollectStmt(stmts[i], inLoop);
+				}
+			}
+
+			void CollectStmt(Stmt stmt, bool inLoop)
+			{
+				switch (stmt)
+				{
+					case ExprStmt exprStmt:
+						CollectExpr(exprStmt.Expression, inLoop);
+						break;
+					case ReturnStmt returnStmt:
+						CollectExpr(returnStmt.Expression, inLoop);
+						break;
+					case IfStmt ifStmt:
+						CollectStmts(ifStmt.ElseBody, inLoop);
+						CollectStmts(ifStmt.ThenBody, inLoop);
+						CollectExpr(ifStmt.Condition, inLoop);
+						break;
+					case ForStmt forStmt:
+						CollectStmts(forStmt.Body, true);
+						if (forStmt.Post != null) CollectExpr(forStmt.Post, true);
+						CollectExpr(forStmt.Condition, true);
+						if (forStmt.Init != null)
+						{
+							CollectExpr(forStmt.Init, true);
+							if (forStmt.Init is BinaryExpr { Op: "=", Left: MemberExpr { Object: IdentifierExpr { Name: "temp" }, Name: var initName } })
+								loopVars.Add(initName);
+						}
+						break;
+					case ForEachStmt forEachStmt:
+						CollectStmts(forEachStmt.Body, true);
+						CollectExpr(forEachStmt.Name, true);
+						if (forEachStmt.Name is MemberExpr { Object: IdentifierExpr { Name: "temp" }, Name: var forEachName })
+							loopVars.Add(forEachName);
+						CollectExpr(forEachStmt.Source, true);
+						if (forEachStmt.Source is MemberExpr { Object: IdentifierExpr { Name: "temp" }, Name: var sourceName })
+							foreachSources.Add(sourceName);
+						break;
+					case WhileStmt whileStmt:
+						CollectStmts(whileStmt.Body, true);
+						CollectExpr(whileStmt.Condition, true);
+						break;
+					case WithStmt withStmt:
+						CollectStmts(withStmt.Body, inLoop);
+						CollectExpr(withStmt.Target, inLoop);
+						break;
+					case SwitchStmt switchStmt:
+						for (var i = switchStmt.Cases.Count - 1; i >= 0; --i)
+						{
+							var switchCase = switchStmt.Cases[i];
+							for (var j = switchCase.Labels.Count - 1; j >= 0; --j)
+								if (switchCase.Labels[j] is { } label) CollectExpr(label, inLoop);
+							CollectStmts(switchCase.Body, inLoop);
+						}
+						CollectExpr(switchStmt.Expression, inLoop);
+						break;
+					case BlockStmt blockStmt:
+						CollectStmts(blockStmt.Body, inLoop);
+						break;
+					case InlineStmt inlineStmt:
+						CollectStmt(inlineStmt.Statement, inLoop);
+						break;
+					case NewStmt newStmt:
+						CollectStmts(newStmt.Body, inLoop);
+						for (var i = newStmt.Args.Count - 1; i >= 0; --i) CollectExpr(newStmt.Args[i], inLoop);
+						break;
+				}
+			}
+
+			CollectStmts(body, false);
+
+			var slot = 0;
+			foreach (var name in order)
+			{
+				var isLoopVar = loopVars.Contains(name);
+				var isForeachSource = foreachSources.Contains(name);
+				var assignCount = assignCounts.TryGetValue(name, out var c) ? c : 0;
+				var inLoopAssign = assignedInLoop.Contains(name);
+				// Loop variables plus heavily-assigned variables. The assignment
+				// threshold is deliberately conservative: official bytecode does not
+				// allocate variables assigned only two or three times (e.g. testConcat.s,
+				// testIfSingle.w in feature-test.gs2bc).
+				if (isLoopVar || isForeachSource || assignCount >= 4 || inLoopAssign)
+				{
+					_registerSlots[name] = slot++;
+					_registerOrder.Add(name);
+				}
+			}
+		}
+
+		private void EmitRegisterPrologue()
+		{
+			foreach (var varName in _registerOrder)
+			{
+				var slot = _registerSlots[varName];
+				_bytecode.Emit(Op.Temp);
+				_bytecode.Emit(Op.TypeVar);
+				_bytecode.EmitDynamicStringIndex(_bytecode.GetString(varName));
+				_bytecode.Emit(Op.MemberAccess);
+				_bytecode.Emit(Op.MarkRegisterVariable);
+				_bytecode.Emit(Op.SetRegister);
+				_bytecode.EmitDynamicNumber(slot);
+				_bytecode.Emit(Op.IndexDec);
+			}
 		}
 
 		private void Emit(Expr expr) => Emit(expr, false, true, 0);
@@ -986,8 +1237,18 @@ internal static class GS2Compiler
 						localFailStart = localFailPatches.Count;
 					}
 					var passNegatedControlAnd = controlLogical && logical.Left is UnaryExpr { Op: "!", Expression: BinaryExpr { Op: "&&" } };
-					var leftPatchOffset = logical.Left is BinaryExpr { Op: "&&" or "||" } ? (controlLogical || negatedLogical) && logical.Op == "||" ? 6 : logical.Op == "&&" && logical.Left is BinaryExpr { Op: "||" } ? 0 : 1 : 0;
+					// A nested "||" inside a control/negated context cannot predict how many
+					// instructions its right side will emit (a register-allocated member read
+					// is one instruction instead of three), so instead of the historical
+					// hardcoded skip its jump patches are deferred until the right side has
+					// been emitted and patched to the real target.
+					const int deferLogicalPatch = -1;
+					var leftPatchOffset = logical.Left is BinaryExpr { Op: "&&" or "||" } ? (controlLogical || negatedLogical) && logical.Op == "||" ? deferLogicalPatch : logical.Op == "&&" && logical.Left is BinaryExpr { Op: "||" } ? 0 : 1 : 0;
+					List<int>? deferredPatches = null;
+					var savedDeferredPatches = _deferredLogicalPatches;
+					if (leftPatchOffset == deferLogicalPatch) _deferredLogicalPatches = deferredPatches = new List<int>();
 					Emit(logical.Left, false, false, leftPatchOffset, controlLogical, negatedLogical, true, passNegatedControlAnd);
+					_deferredLogicalPatches = savedDeferredPatches;
 					if (!IsBooleanExpr(logical.Left)) _bytecode.Emit(Op.ConvToFloat);
 					if (localSuccessPatches != null)
 					{
@@ -1006,7 +1267,9 @@ internal static class GS2Compiler
 					if (logicalInline) _bytecode.Emit(Op.InlineConditional);
 					if (logical.Op == "&&" && controlLogical && _conditionFailPatches.Count > 0) _conditionFailPatches.Peek().Add(loc);
 					else if (logical.Op == "||" && controlLogical && _conditionSuccessPatches.Count > 0) _conditionSuccessPatches.Peek().Add(loc);
+					else if (suppressedLogicalPatchOffset == deferLogicalPatch) _deferredLogicalPatches!.Add(loc);
 					else _bytecode.PatchShort(loc, _bytecode.OpIndex - (logicalInline ? 1 : 0) + (!logicalInline ? suppressedLogicalPatchOffset : 0));
+					if (deferredPatches != null) foreach (var deferredLoc in deferredPatches) _bytecode.PatchShort(deferredLoc, _bytecode.OpIndex - (logicalInline ? 1 : 0));
 					break;
 				case TernaryExpr ternary:
 					EmitTernary(ternary);
@@ -1087,6 +1350,12 @@ internal static class GS2Compiler
 					_bytecode.Emit(BinaryOpcode(binary.Op));
 					break;
 				case MemberExpr member:
+					if (member.Object is IdentifierExpr { Name: "temp" } && _registerSlots.TryGetValue(member.Name, out var registerSlot))
+					{
+						_bytecode.Emit(Op.GetRegister);
+						_bytecode.EmitDynamicNumber(registerSlot);
+						break;
+					}
 					Emit(member.Object);
 					if (NeedsObjectConversion(member.Object)) _bytecode.Emit(Op.ConvToObject);
 					_bytecode.Emit(Op.TypeVar);
@@ -1840,7 +2109,7 @@ internal static class GS2Compiler
 
 		public void EmitDynamicNumber(int value)
 		{
-			var offset = _lastOp == Op.TypeNumber || _lastOp == Op.SetIndex || _lastOp == Op.SetIndexTrue ? 3 : 0;
+			var offset = _lastOp is Op.TypeNumber or Op.SetIndex or Op.SetIndexTrue or Op.SetRegister or Op.GetRegister ? 3 : 0;
 			if (value >= sbyte.MinValue && value <= sbyte.MaxValue) { _code.Add((byte)(0xF0 + offset)); _code.Add(unchecked((byte)(sbyte)value)); }
 			else if (value >= short.MinValue && value <= short.MaxValue) { _code.Add((byte)(0xF1 + offset)); WriteShort(_code, value); }
 			else { _code.Add((byte)(0xF2 + offset)); WriteInt(_code, value); }
@@ -2190,6 +2459,9 @@ internal static class GS2Compiler
 		InlineNew = 40,
 		MakeVar = 41,
 		NewObject = 42,
+		SetRegister = 45,
+		GetRegister = 46,
+		MarkRegisterVariable = 47,
 		Assign = 50,
 		FuncParamsEnd = 51,
 		Inc = 52,
