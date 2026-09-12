@@ -125,6 +125,8 @@ internal static class GS2Compiler
 
 		private Stmt ParseStatement()
 		{
+			if (_current.Type == TokenType.Identifier && _lexer.PeekToken().Type == TokenType.Colon)
+				return ParseLabeledStatement();
 			if (Match(TokenType.Semicolon)) return new BlockStmt([]);
 			if (_current.Type == TokenType.LeftBrace) return new BlockStmt(ParseBlock());
 			if (Match(TokenType.New)) return ParseNewStatement();
@@ -136,13 +138,15 @@ internal static class GS2Compiler
 			}
 			if (Match(TokenType.Break))
 			{
+				var label = _current.Type == TokenType.Identifier ? Expect(TokenType.Identifier).Text : null;
 				Expect(TokenType.Semicolon);
-				return new BreakStmt();
+				return new BreakStmt(label);
 			}
 			if (Match(TokenType.Continue))
 			{
+				var label = _current.Type == TokenType.Identifier ? Expect(TokenType.Identifier).Text : null;
 				Expect(TokenType.Semicolon);
-				return new ContinueStmt();
+				return new ContinueStmt(label);
 			}
 			if (Match(TokenType.If))
 			{
@@ -203,6 +207,30 @@ internal static class GS2Compiler
 		{
 			hasElse = true;
 			return body;
+		}
+
+		private Stmt ParseLabeledStatement()
+		{
+			var label = Expect(TokenType.Identifier).Text;
+			Expect(TokenType.Colon);
+			if (Match(TokenType.For))
+			{
+				return ParseForStatement() switch
+				{
+					ForStmt forStatement => forStatement with { Label = label },
+					ForEachStmt forEachStatement => forEachStatement with { Label = label },
+					var other => other,
+				};
+			}
+			if (Match(TokenType.While))
+			{
+				Expect(TokenType.LeftParen);
+				var condition = ParseExpression();
+				Expect(TokenType.RightParen);
+				return new WhileStmt(condition, ParseBody(), label);
+			}
+			Error("malformed input");
+			return new BlockStmt([]);
 		}
 
 		private Stmt ParseForStatement()
@@ -595,6 +623,7 @@ internal static class GS2Compiler
 		private readonly Dictionary<string, Dictionary<string, int>> _enums;
 		private readonly Stack<List<int>> _breakPatches = new();
 		private readonly Stack<List<int>> _continuePatches = new();
+		private readonly Stack<(string Name, List<int> Breaks, List<int> Continues)> _labelScopes = new();
 		private readonly Stack<List<int>> _conditionFailPatches = new();
 		private readonly Stack<List<int>> _conditionSuccessPatches = new();
 		private readonly Dictionary<string, string> _negativeFloatText = new(StringComparer.Ordinal);
@@ -692,8 +721,8 @@ internal static class GS2Compiler
 			else if (statement is WhileStmt whileStatement) EmitWhile(whileStatement);
 			else if (statement is WithStmt withStatement) EmitWith(withStatement);
 			else if (statement is SwitchStmt switchStatement) EmitSwitch(switchStatement);
-			else if (statement is BreakStmt) EmitBreak();
-			else if (statement is ContinueStmt) EmitContinue();
+			else if (statement is BreakStmt breakStatement) EmitBreak(breakStatement.Label);
+			else if (statement is ContinueStmt continueStatement) EmitContinue(continueStatement.Label);
 			else if (statement is InlineStmt inlineStatement) EmitStatement(inlineStatement.Statement, false);
 			else if (statement is BlockStmt blockStatement) foreach (var stmt in blockStatement.Body) EmitStatement(stmt);
 			else if (statement is NewStmt newStatement) EmitNewStatement(newStatement);
@@ -746,6 +775,7 @@ internal static class GS2Compiler
 			_breakPatches.Push(breakPatches);
 			List<int> continuePatches = [];
 			_continuePatches.Push(continuePatches);
+			if (statement.Label != null) _labelScopes.Push((statement.Label, breakPatches, continuePatches));
 			_bytecode.Emit(Op.CmdCall);
 			foreach (var stmt in statement.Body) EmitStatement(stmt);
 			foreach (var patch in continuePatches) _bytecode.PatchShort(patch, _bytecode.OpIndex);
@@ -754,6 +784,7 @@ internal static class GS2Compiler
 			_bytecode.EmitDynamicNumber(start);
 			_continuePatches.Pop();
 			_breakPatches.Pop();
+			if (statement.Label != null) _labelScopes.Pop();
 			_bytecode.PatchShort(breakLoc, _bytecode.OpIndex);
 			foreach (var patch in breakPatches) _bytecode.PatchShort(patch, _bytecode.OpIndex);
 			foreach (var patch in conditionFailPatches) _bytecode.PatchShort(patch, _bytecode.OpIndex);
@@ -773,6 +804,7 @@ internal static class GS2Compiler
 			_breakPatches.Push(breakPatches);
 			List<int> continuePatches = [];
 			_continuePatches.Push(continuePatches);
+			if (statement.Label != null) _labelScopes.Push((statement.Label, breakPatches, continuePatches));
 			_bytecode.Emit(Op.CmdCall);
 			foreach (var stmt in statement.Body) EmitStatement(stmt);
 			foreach (var patch in continuePatches) _bytecode.PatchShort(patch, _bytecode.OpIndex);
@@ -781,6 +813,7 @@ internal static class GS2Compiler
 			_bytecode.EmitDynamicNumber(start);
 			_continuePatches.Pop();
 			_breakPatches.Pop();
+			if (statement.Label != null) _labelScopes.Pop();
 			_bytecode.PatchShort(breakLoc, _bytecode.OpIndex);
 			foreach (var patch in breakPatches) _bytecode.PatchShort(patch, _bytecode.OpIndex);
 			_bytecode.Emit(Op.IndexDec);
@@ -802,6 +835,7 @@ internal static class GS2Compiler
 			_breakPatches.Push(breakPatches);
 			List<int> continuePatches = [];
 			_continuePatches.Push(continuePatches);
+			if (statement.Label != null) _labelScopes.Push((statement.Label, breakPatches, continuePatches));
 			_bytecode.Emit(Op.If);
 			var breakLoc = _bytecode.EmitNumberOperandPlaceholder();
 			breakPatches.Add(breakLoc);
@@ -812,6 +846,7 @@ internal static class GS2Compiler
 			_bytecode.EmitNumberOperand(start);
 			_continuePatches.Pop();
 			_breakPatches.Pop();
+			if (statement.Label != null) _labelScopes.Pop();
 			foreach (var patch in breakPatches) _bytecode.PatchShort(patch, _bytecode.OpIndex);
 			foreach (var patch in conditionFailPatches) _bytecode.PatchShort(patch, _bytecode.OpIndex);
 		}
@@ -865,18 +900,38 @@ internal static class GS2Compiler
 			_bytecode.Emit(Op.IndexDec);
 		}
 
-		private void EmitBreak()
+		private void EmitBreak(string? label = null)
 		{
-			if (_breakPatches.Count == 0) return;
+			List<int>? patches = null;
+			if (label == null)
+			{
+				if (_breakPatches.Count > 0) patches = _breakPatches.Peek();
+			}
+			else
+			{
+				foreach (var scope in _labelScopes)
+					if (scope.Name == label) { patches = scope.Breaks; break; }
+			}
+			if (patches == null) return;
 			_bytecode.Emit(Op.SetIndex);
-			_breakPatches.Peek().Add(_bytecode.EmitNumberOperandPlaceholder());
+			patches.Add(_bytecode.EmitNumberOperandPlaceholder());
 		}
 
-		private void EmitContinue()
+		private void EmitContinue(string? label = null)
 		{
-			if (_continuePatches.Count == 0) return;
+			List<int>? patches = null;
+			if (label == null)
+			{
+				if (_continuePatches.Count > 0) patches = _continuePatches.Peek();
+			}
+			else
+			{
+				foreach (var scope in _labelScopes)
+					if (scope.Name == label) { patches = scope.Continues; break; }
+			}
+			if (patches == null) return;
 			_bytecode.Emit(Op.SetIndex);
-			_continuePatches.Peek().Add(_bytecode.EmitNumberOperandPlaceholder());
+			patches.Add(_bytecode.EmitNumberOperandPlaceholder());
 		}
 
 		private void EmitNewStatement(NewStmt statement)
@@ -1931,6 +1986,18 @@ internal static class GS2Compiler
 		private int _lineStart;
 		public Lexer(string code) => _code = code;
 
+		public Token PeekToken()
+		{
+			var pos = _pos;
+			var line = _line;
+			var lineStart = _lineStart;
+			var token = Next();
+			_pos = pos;
+			_line = line;
+			_lineStart = lineStart;
+			return token;
+		}
+
 		public Token Next()
 		{
 			while (_pos < _code.Length)
@@ -2119,14 +2186,14 @@ internal static class GS2Compiler
 	private sealed record BlockStmt(List<Stmt> Body) : Stmt;
 	private sealed record ReturnStmt(Expr Expression) : Stmt;
 	private sealed record IfStmt(Expr Condition, List<Stmt> ThenBody, List<Stmt> ElseBody, bool HasElse) : Stmt;
-	private sealed record ForStmt(Expr? Init, Expr Condition, Expr? Post, List<Stmt> Body) : Stmt;
-	private sealed record ForEachStmt(Expr Name, Expr Source, List<Stmt> Body) : Stmt;
-	private sealed record WhileStmt(Expr Condition, List<Stmt> Body) : Stmt;
+	private sealed record ForStmt(Expr? Init, Expr Condition, Expr? Post, List<Stmt> Body, string? Label = null) : Stmt;
+	private sealed record ForEachStmt(Expr Name, Expr Source, List<Stmt> Body, string? Label = null) : Stmt;
+	private sealed record WhileStmt(Expr Condition, List<Stmt> Body, string? Label = null) : Stmt;
 	private sealed record WithStmt(Expr Target, List<Stmt> Body) : Stmt;
 	private sealed record SwitchStmt(Expr Expression, List<SwitchCase> Cases) : Stmt;
 	private sealed record NewStmt(string TypeName, List<Expr> Args, List<Stmt> Body) : Stmt;
-	private sealed record BreakStmt : Stmt;
-	private sealed record ContinueStmt : Stmt;
+	private sealed record BreakStmt(string? Label = null) : Stmt;
+	private sealed record ContinueStmt(string? Label = null) : Stmt;
 	private sealed record SwitchCase(List<Expr?> Labels, List<Stmt> Body);
 	private abstract record Expr;
 	private sealed record BinaryExpr(Expr Left, string Op, Expr Right) : Expr;
