@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "dc6caf0ba55337145209df40ca85a1d6787bbcaf4ce16cf563ab00ff897d6038",
-  "bytecode_size": 5953,
+  "bytecode_hash": "d5bd0d937cab5f888102ac430ad7b033781251afc208a658dbc6d503c7c32ff2",
+  "bytecode_size": 5952,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weapon+Guns_Debug.gs2",
-    "generated_at": "2026-01-04 18:39:05",
-    "compiler_version": "modified_1767569912"
+    "generated_at": "2026-09-13 04:48:59",
+    "compiler_version": "modified_1789274939"
   }
 }

@@ -261,9 +261,68 @@ public class InterfaceTests
 	}
 
 	[Fact]
-	public void Given_math_builtin_calls_When_compiling_Then_direct_opcodes_are_emitted()
+	public void Given_random_with_mixed_sign_float_args_When_compiling_Then_each_operand_keeps_its_own_value()
+	{
+		// Regression: _negativeFloatText state leaked between emissions, so
+		// random(0.5, -0.5) compiled both operands as float:-0.5.
+		const string scriptText =
+			"""
+						function onCreated() {
+						  temp.a = random(0.5, -0.5);
+						}
+			""";
+
+		var result = Interface.CompileCode(scriptText, withHeader: false);
+
+		Assert.True(result.Success);
+		// Builtin args emit right-to-left: -0.5 first, then 0.5.
+		Assert.Equal(new[] { "-0.5", "0.5" }, ReadFloatOperandTexts(result.ByteCode));
+	}
+
+	[Fact]
+	public void Given_repeated_negative_float_literals_When_compiling_Then_no_double_dash_operand_text_is_emitted()
+	{
+		// Regression: emitting -0.6 twice produced float:--0.6 the second time,
+		// and a later positive 0.5 literal was corrupted to float:--0.5.
+		const string scriptText =
+			"""
+						function onCreated() {
+						  temp.a = random(0.5, -0.5);
+						  temp.b = random(0.5, -0.5);
+						  temp.c = -0.6;
+						  temp.d = -0.6;
+						  temp.e = 0.5;
+						}
+			""";
+
+		var result = Interface.CompileCode(scriptText, withHeader: false);
+
+		Assert.True(result.Success);
+		Assert.Equal(
+			new[] { "-0.5", "0.5", "-0.5", "0.5", "-0.6", "-0.6", "0.5" },
+			ReadFloatOperandTexts(result.ByteCode));
+	}
+
+	[Fact]
+	public void Given_positive_float_after_negative_of_same_magnitude_When_compiling_Then_signs_are_independent()
 	{
 		const string scriptText =
+			"""
+						function onCreated() {
+						  temp.a = -0.25;
+						  temp.b = 0.25;
+						}
+			""";
+
+		var result = Interface.CompileCode(scriptText, withHeader: false);
+
+		Assert.True(result.Success);
+		Assert.Equal(new[] { "-0.25", "0.25" }, ReadFloatOperandTexts(result.ByteCode));
+	}
+
+	[Fact]
+	public void Given_math_builtin_calls_When_compiling_Then_direct_opcodes_are_emitted()
+	{		const string scriptText =
 			"""
 						function onCreated() {
 						  temp.a = random(1, 2);
@@ -751,6 +810,24 @@ public class InterfaceTests
 	}
 
 	private static byte[] ReadBytecodeSegment(byte[] bytecode) => ReadSegment(bytecode, 4);
+
+	private static List<string> ReadFloatOperandTexts(byte[] bytecode)
+	{
+		// 0xF6 marks a double-number operand: 0xF6 followed by a NUL-terminated
+		// float text (the value the VM parses at runtime).
+		var code = ReadBytecodeSegment(bytecode);
+		List<string> texts = [];
+		for (var i = 0; i < code.Length; i++)
+		{
+			if (code[i] != 0xF6) continue;
+			var start = i + 1;
+			var end = start;
+			while (end < code.Length && code[end] != 0) end++;
+			texts.Add(Encoding.UTF8.GetString(code, start, end - start));
+			i = end;
+		}
+		return texts;
+	}
 
 	private static byte[] ReadSegment(byte[] bytecode, int segmentType)
 	{

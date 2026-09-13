@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "6dc56c1b3275d5ca9970fe3e2ce182fd512cfb017adfba83062ec57936ee9843",
-  "bytecode_size": 3051,
+  "bytecode_hash": "2411940f72e8cd006014bf5bf3962383e2ea70961beac93de750d46383ae52f8",
+  "bytecode_size": 3050,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weapon+Guns_KuJi.gs2",
-    "generated_at": "2026-01-04 18:39:05",
-    "compiler_version": "modified_1767569912"
+    "generated_at": "2026-09-13 04:48:59",
+    "compiler_version": "modified_1789274939"
   }
 }
