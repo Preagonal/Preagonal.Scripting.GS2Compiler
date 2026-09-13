@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "ddd3867ffba058a13902531cf15a3065b57e761a354ef53b1f67c6d0e3229dd7",
-  "bytecode_size": 564,
+  "bytecode_hash": "3a97fff949fdbe9dc0473dbb4c7114bbae20390eff6c9d76c569febc6b2fd7aa",
+  "bytecode_size": 555,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weaponTwinny_Tool.gs2",
-    "generated_at": "2026-01-04 18:39:05",
-    "compiler_version": "modified_1767569912"
+    "generated_at": "2026-09-13 03:50:29",
+    "compiler_version": "modified_1789271429"
   }
 }

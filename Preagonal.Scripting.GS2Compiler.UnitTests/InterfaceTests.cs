@@ -798,4 +798,127 @@ public class InterfaceTests
 		}
 		return false;
 	}
+
+	// OP_PARAMS (official opcode 0xBE = 190) for the `params` keyword.
+	private const byte OpParams = 190;
+	private const byte OpTypeVar = 22;
+	private const byte OpAssign = 50;
+
+	[Fact]
+	public void Given_declared_parameter_named_params_When_compiling_Then_op_params_emitted()
+	{
+		const string scriptText =
+			"""
+					function f(params) {
+					  return 1;
+					}
+			""";
+
+		var result = Interface.CompileCode(scriptText, withHeader: false);
+		var strings = ReadStringTable(result.ByteCode);
+		var code = ReadBytecodeSegment(result.ByteCode);
+
+		Assert.True(result.Success);
+		Assert.Contains(OpParams, code);
+		Assert.DoesNotContain("params", strings);
+	}
+
+	[Fact]
+	public void Given_params_index_read_When_compiling_Then_op_params_emitted()
+	{
+		const string scriptText =
+			"""
+					function onCreated() {
+					  temp.x = params[0];
+					}
+			""";
+
+		var result = Interface.CompileCode(scriptText, withHeader: false);
+		var strings = ReadStringTable(result.ByteCode);
+		var code = ReadBytecodeSegment(result.ByteCode);
+
+		Assert.True(result.Success);
+		Assert.Contains(OpParams, code);
+		Assert.DoesNotContain("params", strings);
+	}
+
+	[Fact]
+	public void Given_bare_params_return_When_compiling_Then_op_params_emitted()
+	{
+		const string scriptText =
+			"""
+					function onCreated() {
+					  return params;
+					}
+			""";
+
+		var result = Interface.CompileCode(scriptText, withHeader: false);
+		var strings = ReadStringTable(result.ByteCode);
+		var code = ReadBytecodeSegment(result.ByteCode);
+
+		Assert.True(result.Success);
+		Assert.Contains(OpParams, code);
+		Assert.DoesNotContain("params", strings);
+	}
+
+	[Fact]
+	public void Given_params_on_rhs_When_compiling_Then_op_params_emitted()
+	{
+		const string scriptText =
+			"""
+					function onCreated() {
+					  temp.x = params;
+					}
+			""";
+
+		var result = Interface.CompileCode(scriptText, withHeader: false);
+		var strings = ReadStringTable(result.ByteCode);
+		var code = ReadBytecodeSegment(result.ByteCode);
+
+		Assert.True(result.Success);
+		Assert.Contains(OpParams, code);
+		Assert.DoesNotContain("params", strings);
+	}
+
+	[Fact]
+	public void Given_temp_params_member_access_When_compiling_Then_type_var_params_emitted()
+	{
+		// Regression guard: `temp.params` is a member name, not the keyword —
+		// it must keep going through MemberExpr → OP_TYPE_VAR "params".
+		const string scriptText =
+			"""
+					function onCreated() {
+					  temp.x = temp.params;
+					}
+			""";
+
+		var result = Interface.CompileCode(scriptText, withHeader: false);
+		var strings = ReadStringTable(result.ByteCode);
+		var code = ReadBytecodeSegment(result.ByteCode);
+
+		Assert.True(result.Success);
+		Assert.DoesNotContain(OpParams, code);
+		Assert.Contains(OpTypeVar, code);
+		Assert.Contains("params", strings);
+	}
+
+	[Fact]
+	public void Given_params_assignment_target_When_compiling_Then_op_params_then_assign_emitted()
+	{
+		// Explicit decision (see GS2Compiler.cs): bare `params = x` is accepted
+		// and emits OP_PARAMS + OP_ASSIGN, mirroring the other keywords.
+		const string scriptText =
+			"""
+					function onCreated() {
+					  params = 1;
+					}
+			""";
+
+		var result = Interface.CompileCode(scriptText, withHeader: false);
+		var code = ReadBytecodeSegment(result.ByteCode);
+
+		Assert.True(result.Success);
+		// OP_PARAMS, then the number-1 operand, then OP_ASSIGN.
+		Assert.True(Contains([OpParams, (byte)20, (byte)243, (byte)1, OpAssign], code));
+	}
 }

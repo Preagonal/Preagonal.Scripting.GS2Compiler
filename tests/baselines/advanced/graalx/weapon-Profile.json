@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "26b1d804c53ff9a7baf3c42f976bb8588399727539f8d5dd8b88968230e41a53",
-  "bytecode_size": 3153,
+  "bytecode_hash": "3402e166c3ffb558ac7a5afd2cb1c7c8225f5c6146ac4b80cb037c346263e4d4",
+  "bytecode_size": 3134,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weapon-Profile.gs2",
-    "generated_at": "2026-01-04 18:39:04",
-    "compiler_version": "modified_1767569912"
+    "generated_at": "2026-09-13 03:50:39",
+    "compiler_version": "modified_1789271439"
   }
 }

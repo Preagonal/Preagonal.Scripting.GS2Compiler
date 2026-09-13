@@ -929,6 +929,13 @@ internal static class GS2Compiler
 					_bytecode.Emit(Op.ArrayAssign);
 					break;
 				case BinaryExpr { Op: "=", Left: var left, Right: var right }:
+					// Explicit decision: bare `params = x` as an assignment target emits
+					// OP_PARAMS followed by OP_ASSIGN, mirroring the pre-existing behavior
+					// for the other keywords (`this = x` emits OP_THIS + OP_ASSIGN with no
+					// rejection). Official-toolchain behavior for `params = x` could not be
+					// verified (server-side upload path blocked: graalbot lacks write
+					// rights on weapons/), and the corpus has zero occurrences, so this
+					// does not affect the round-trip gate.
 					Emit(left);
 					if (copyAssignmentTarget) _bytecode.Emit(Op.CopyLastOp);
 					if (right is BinaryExpr { Op: "=" }) Emit(right, true, true, 0);
@@ -1146,6 +1153,12 @@ internal static class GS2Compiler
 					break;
 				case IdentifierExpr { Name: "pi" }:
 					_bytecode.Emit(Op.Pi);
+					break;
+				case IdentifierExpr { Name: "params" }:
+					// Official keyword: the caller's parameter array (OP_PARAMS, 0xBE).
+					// Member accesses like `temp.params` are unaffected — they go through
+					// MemberExpr, not this switch, and still emit OP_TYPE_VAR "params".
+					_bytecode.Emit(Op.Params);
 					break;
 				case IdentifierExpr id:
 					_bytecode.Emit(Op.TypeVar);
@@ -2271,6 +2284,13 @@ internal static class GS2Compiler
 		Player = 182,
 		Playero = 183,
 		Level = 184,
-		Temp = 189
+		Temp = 189,
+		// Official GS2 opcode 0xBE (190): the caller's `params` array. Verified from official
+		// toolchain bytecode (all 296 corpus occurrences are zero-operand). Note that
+		// `temp.params` / member-name uses are NOT this opcode — they still go through
+		// MemberExpr → OP_TYPE_VAR "params" (the official compiler emits that form for
+		// member names). Bare `params.foo` / `params.size()` on the keyword itself are
+		// unverified against the official toolchain and may diverge.
+		Params = 190
 	}
 }
