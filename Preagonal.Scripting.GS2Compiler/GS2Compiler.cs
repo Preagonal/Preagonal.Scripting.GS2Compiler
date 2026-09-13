@@ -1229,7 +1229,7 @@ internal static class GS2Compiler
 					break;
 				case CastExpr { Type: "float", Expression: var castValue }:
 					Emit(castValue);
-					if (!IsNumberExpr(castValue)) _bytecode.Emit(Op.ConvToFloat);
+					if (castValue is CastExpr { Type: "int" } || !IsNumberExpr(castValue)) _bytecode.Emit(Op.ConvToFloat);
 					break;
 				case CastExpr { Type: "_", Expression: var castValue }:
 					Emit(castValue);
