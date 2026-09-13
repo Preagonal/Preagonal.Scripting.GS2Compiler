@@ -1073,7 +1073,7 @@ internal static class GS2Compiler
 					break;
 				case BinaryExpr binary:
 					Emit(binary.Left);
-					if (binary.Op == "@" && NeedsStringConversion(binary.Left)) _bytecode.Emit(Op.ConvToString);
+					if (binary.Op == "@" && (NeedsStringConversion(binary.Left) || binary.Left is CastExpr { Type: "_" })) _bytecode.Emit(Op.ConvToString);
 					if ((IsNumericOp(binary.Op) || IsComparisonOp(binary.Op)) && NeedsNumericConversion(binary.Left)) _bytecode.Emit(Op.ConvToFloat);
 					if (IsComparisonOp(binary.Op) && binary.Left is UnaryExpr { Op: "++" or "--", Postfix: true }) _bytecode.Emit(Op.ConvToFloat);
 					if (binary.Op == "%" && binary.Left is BinaryExpr { Op: "+=" or "-=" or "*=" or "/=" or "%=" }) _bytecode.Emit(Op.ConvToFloat);
