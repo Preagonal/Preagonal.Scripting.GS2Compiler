@@ -1088,7 +1088,7 @@ internal static class GS2Compiler
 					break;
 				case MemberExpr member:
 					Emit(member.Object);
-					if (NeedsObjectConversion(member.Object)) _bytecode.Emit(Op.ConvToObject);
+					if (NeedsObjectConversion(member.Object) || member.Object is ArrayIndexExpr) _bytecode.Emit(Op.ConvToObject);
 					_bytecode.Emit(Op.TypeVar);
 					_bytecode.EmitDynamicStringIndex(_bytecode.GetString(member.Name));
 					_bytecode.Emit(Op.MemberAccess);
@@ -1539,7 +1539,7 @@ internal static class GS2Compiler
 		private void EmitArrayIndex(ArrayIndexExpr expr, bool assignmentTarget)
 		{
 			Emit(expr.Target);
-			if (expr.Target is not ArrayIndexExpr) _bytecode.Emit(Op.ConvToObject);
+			_bytecode.Emit(Op.ConvToObject);
 			Emit(expr.Index);
 			if (!IsNumberExpr(expr.Index)) _bytecode.Emit(Op.ConvToFloat);
 			if (!assignmentTarget) _bytecode.Emit(Op.Array);
