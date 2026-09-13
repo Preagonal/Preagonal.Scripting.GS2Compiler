@@ -1854,7 +1854,6 @@ internal static class GS2Compiler
 
 		public byte[] ToArray()
 		{
-			Emit(Op.Ret);
 			foreach (var loc in _prejumpPatches) PatchShort(loc, OpIndex);
 			List<byte> result = [];
 			WriteSegment(result, 1, [0, 0, 0, 0]);

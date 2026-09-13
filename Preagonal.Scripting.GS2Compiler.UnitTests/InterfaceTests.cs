@@ -752,6 +752,64 @@ public class InterfaceTests
 
 	private static byte[] ReadBytecodeSegment(byte[] bytecode) => ReadSegment(bytecode, 4);
 
+	[Fact]
+	public void Given_function_with_explicit_return_When_compiling_Then_no_trailing_redundant_ret_is_emitted()
+	{
+		const string scriptText =
+			"""
+						function calcCirc(radius) {
+							return 6.283185307 * radius;
+						}
+			""";
+
+		var result = Interface.CompileCode(scriptText, withHeader: false);
+		var code = ReadBytecodeSegment(result.ByteCode);
+
+		Assert.True(result.Success);
+		// Op.Ret = 7. The explicit return emits a single RET; the writer must not append a second one.
+		Assert.True(code.Length >= 2);
+		Assert.Equal((byte)7, code[^1]);
+		Assert.NotEqual((byte)7, code[^2]);
+	}
+
+	[Fact]
+	public void Given_function_without_explicit_return_When_compiling_Then_no_trailing_redundant_ret_is_emitted()
+	{
+		const string scriptText =
+			"""
+						function noRet(a) {
+							temp.x = a + 1;
+						}
+			""";
+
+		var result = Interface.CompileCode(scriptText, withHeader: false);
+		var code = ReadBytecodeSegment(result.ByteCode);
+
+		Assert.True(result.Success);
+		// Default epilogue is `0, RET` (Op.TypeNumber=20 ... Op.Ret=7); no extra RET may follow.
+		Assert.True(code.Length >= 3);
+		Assert.Equal((byte)7, code[^1]);
+		Assert.NotEqual((byte)7, code[^2]);
+	}
+
+	[Fact]
+	public void Given_top_level_statements_When_compiling_Then_no_trailing_ret_is_emitted()
+	{
+		const string scriptText =
+			"""
+						temp.x = 1 + 2;
+						echo(temp.x);
+			""";
+
+		var result = Interface.CompileCode(scriptText, withHeader: false);
+		var code = ReadBytecodeSegment(result.ByteCode);
+
+		Assert.True(result.Success);
+		// Official toolchain ends top-level code with the last statement (OP_INDEX_DEC=32 here), no RET.
+		Assert.True(code.Length >= 1);
+		Assert.NotEqual((byte)7, code[^1]);
+	}
+
 	private static byte[] ReadSegment(byte[] bytecode, int segmentType)
 	{
 		var offset = 0;
