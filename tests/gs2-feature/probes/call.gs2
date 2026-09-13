@@ -1,0 +1,2 @@
+//#CLIENTSIDE
+function onCreated() { echo(1, 2); }

@@ -1,19 +1,19 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-	<ItemGroup>
-		<ProjectReference Include="..\Preagonal.Scripting.GS2Compiler\Preagonal.Scripting.GS2Compiler.csproj" />
-	</ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Preagonal.Scripting.GS2Compiler\Preagonal.Scripting.GS2Compiler.csproj"/>
+    </ItemGroup>
 
-	<PropertyGroup>
-		<TargetFramework>net10.0</TargetFramework>
-		<ImplicitUsings>false</ImplicitUsings>
-		<Nullable>enable</Nullable>
-		<LangVersion>latest</LangVersion>
-		<PublishAot>true</PublishAot>
-		<NativeLib>Shared</NativeLib>
-		<SelfContained>true</SelfContained>
-		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-		<IsAotCompatible>true</IsAotCompatible>
-	</PropertyGroup>
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>false</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <PublishAot>true</PublishAot>
+        <NativeLib>Shared</NativeLib>
+        <SelfContained>true</SelfContained>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <IsAotCompatible>true</IsAotCompatible>
+    </PropertyGroup>
 
 </Project>

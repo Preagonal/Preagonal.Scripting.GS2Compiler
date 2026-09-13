@@ -1,0 +1,11 @@
+//#CLIENTSIDE
+function names(temp.object,temp.name) {
+  temp.object.(@"add" @ temp.name @ "modifier")(1);
+  temp.object.("add" @ temp.name @ "modifier")(1);
+  temp.object.(@temp.name)(2);
+  temp.object.(temp.name)(2);
+  temp.object.(@temp.name @ "end")(3);
+  temp.object.(@1 @ temp.name)(4);
+  temp.object.(@"literal")(5);
+  temp.object.(@"add" @ temp.name)=6;
+}

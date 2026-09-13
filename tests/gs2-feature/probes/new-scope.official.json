@@ -1,0 +1,9 @@
+{
+  "type": "weapon",
+  "name": "-tmpweapon",
+  "byteCodeBase64": "AAAAAQAAAAQAAAAAAAAAAgAAAAsAAAABb3duZXJzAAAAAAMAAAAvY2F0Y2hldmVudAB4AHRoaXMAaQBoAGUAVFRlc3QAY2hpbGQAYWRkY29udHJvbAAAAAAEAAAA2AHzfBczCgm1FvAAIy8t8wAgtBbwASMvLfMBIBbwAi8t8wIgvRbwAyMvLfMDIC7zAxTzADIu8wMhFPMCSATzOAku8wIkvRbwAyMiIy7zATIXFfAEFfAFLvMCLvMABiAu8wM0IAHzHrQW8AEjKB4eHhXwBiIqMiSW824XFfAEFfAFFvACtRbwACMGILQW8AEjFPMBMhXwBygeHh4V8AYiKjIklvNoFxXwBBXwBRbwArUW8AAjBiCXFx8W8AgGIJcXHxbwCAYgFxXwBBXwBS7zAi7zAAYgFPMABw==",
+  "byteCount": 310,
+  "outputPath": "/tmp/new-scope.gs2bc",
+  "temporaryScriptRemoved": true,
+  "success": true
+}

@@ -1,0 +1,8 @@
+{
+  "type": "weapon",
+  "byteCount": 0,
+  "outputPath": "/tmp/gs2-current-historical.gs2bc",
+  "temporaryScriptRemoved": true,
+  "success": false,
+  "diagnostic": "Official compiler error for weapon '-tmpweapon': error: missing semicolon at line 5: goto skip;"
+}

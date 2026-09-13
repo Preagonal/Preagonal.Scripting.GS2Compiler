@@ -11,11 +11,10 @@ public static unsafe class NativeExports
 	[StructLayout(LayoutKind.Sequential)]
 	public struct Response
 	{
-		[MarshalAs(UnmanagedType.I1)]
-		public bool Success;
-		public IntPtr ErrMsg;
-		public IntPtr ByteCode;
-		public uint ByteCodeSize;
+		[MarshalAs(UnmanagedType.I1)] public bool   Success;
+		public                               IntPtr ErrMsg;
+		public                               IntPtr ByteCode;
+		public                               uint   ByteCodeSize;
 	}
 
 	[UnmanagedCallersOnly(EntryPoint = "get_context")]
@@ -42,9 +41,9 @@ public static unsafe class NativeExports
 		var result = Interface.CompileCode(Utf8(code), Utf8(type) ?? "weapon", Utf8(name) ?? "npc", withHeader);
 		return new()
 		{
-			Success = result.Success,
-			ErrMsg = result.ErrMsg == null ? IntPtr.Zero : Marshal.StringToCoTaskMemUTF8(result.ErrMsg),
-			ByteCode = result.ByteCode.Length == 0 ? IntPtr.Zero : Copy(result.ByteCode),
+			Success      = result.Success,
+			ErrMsg       = result.ErrMsg == null ? IntPtr.Zero : Marshal.StringToCoTaskMemUTF8(result.ErrMsg),
+			ByteCode     = result.ByteCode.Length == 0 ? IntPtr.Zero : Copy(result.ByteCode),
 			ByteCodeSize = (uint)result.ByteCode.Length,
 		};
 	}

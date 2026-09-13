@@ -1,0 +1,12 @@
+//#CLIENTSIDE
+function statements() {
+  if (a) echo(1);
+  if (a) {echo(1);}
+  if (a) this.n++;
+  if (a) {this.n++;}
+  if (a) findWeapon("x").run();
+  if (a) {findWeapon("x").run();}
+  while (a) echo(2);
+  for (temp.i=0;temp.i<2;temp.i++) echo(temp.i);
+  with (obj) echo(3);
+}

@@ -1,0 +1,6 @@
+//#CLIENTSIDE
+function values() {
+ echo(thiso.("na" @ "me"),playero.("na" @ "me"),temp.("na" @ "me"));
+ thiso.("foo" @ 1)(2); playero.("foo" @ 1)(2);
+ echo(thiso.length(), playero.length());
+}

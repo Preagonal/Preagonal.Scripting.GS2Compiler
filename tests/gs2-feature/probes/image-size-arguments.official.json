@@ -1,0 +1,9 @@
+{
+  "type": "weapon",
+  "name": "-tmpweapon",
+  "byteCodeBase64": "AAAAAQAAAAQAAAAAAAAAAgAAABsAAAAgcmVwZWF0ZWQAAAAAAWFyZ3VtZW50cwAAAAADAAAAP2ZvbyxiYXIAZ2V0aW1nd2lkdGgAZWNobwBmb28gICsgIGJhciAgAGdldGltZ2hlaWdodAAAaQBmb28ucG5nAAAAAAQAAACxAfNhFzMKCRcXFfAAFvABBhbwAgYgFxcV8AMW8AQGFvACBiAXFxXwBRbwAQYW8AIGIBTzAAcB82EXMwoJFvABLy3zACAW8AIvLfMBIL0W8AYjLy3zAiAu8wIU8wAyLvMCIRTzAkgE80cJFxcV8Acu8wAGLvMBBiAu8wI0IAHzNRcXFfAHLvMABhcV8Acu8wAGFxXwBy7zAAYXFfAHLvMABhcV8Acu8wAGLvMBBiAU8wAH",
+  "byteCount": 303,
+  "outputPath": "/tmp/preagonal-official-gs2-image-args.gs2bc",
+  "temporaryScriptRemoved": true,
+  "success": true
+}

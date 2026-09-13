@@ -1,0 +1,6 @@
+//#CLIENTSIDE
+function onCreated(temp.arg) {}
+if (playertouchesme) { this.value = 1; }
+if (playertouchesother) { this.value = 2; }
+if (playerhurted) { this.value = 3; }
+if (wasshooted) { this.value = 4; }

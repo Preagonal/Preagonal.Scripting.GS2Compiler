@@ -1,0 +1,9 @@
+{
+  "type": "weapon",
+  "name": "-tmpweapon",
+  "byteCodeBase64": "AAAAAQAAAAQAAAAAAAAAAgAAACgAAAABb25Cb215V2VhcG9uRmlyZWQAAAAADG9uV2VhcG9uRmlyZWQAAAAAAwAAAElvbldlYXBvbkZpcmVkAGFjY291bnQAbGV2ZWwAZGl2ZQB5AHgAdHJpZ2dlcmFjdGlvbgBjbGllbnQAZGl2ZWRvd24AAHdhcnAAAAAABAAAAFcB8zEXMwoJFxbwAAYgFPMABwHzMRczCgkXthbwASO2FvACIxXwA7YW8AQjthbwBSMW8AYGIBbwByQW8AgjIQTzLxcV8AkW8AoU8wAU8wAW8AYGIBTzAAc=",
+  "byteCount": 236,
+  "outputPath": "/tmp/gs2-current-historical.gs2bc",
+  "temporaryScriptRemoved": true,
+  "success": true
+}

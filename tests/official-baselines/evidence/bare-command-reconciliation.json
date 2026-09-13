@@ -1,0 +1,39 @@
+{
+  "beforeResults": "gs2-class-join-coordinates.trx",
+  "afterResults": "gs2-bare-commands-checkpoint.trx",
+  "beforePassed": 648,
+  "afterPassed": 654,
+  "before": 38,
+  "after": 33,
+  "newFailures": [],
+  "resolved": [
+    "3c28eb1c-619d-acb5-6489-419614c03022",
+    "bd7a6777-b745-1c66-1764-1f93c4ab421a",
+    "21a48cf1-160a-69b7-590e-f30fd066d361",
+    "327a2946-8240-90f4-706a-83bfc10a1036",
+    "75084556-2fda-355a-2b83-de80e43bdded"
+  ],
+  "changedFailures": [],
+  "matches": [
+    {
+      "relative": "advanced/graalx/weaponRC_AttributesWindow.gs2",
+      "bytes": 1458
+    },
+    {
+      "relative": "advanced/graalx/weaponRC_NCControl.gs2",
+      "bytes": 3523
+    },
+    {
+      "relative": "advanced/graalx/weaponSystems_Free.gs2",
+      "bytes": 3940
+    },
+    {
+      "relative": "advanced/graalx/weaponTwinny_Tool.gs2",
+      "bytes": 604
+    },
+    {
+      "relative": "advanced/graalx/weapon-Virus.gs2",
+      "bytes": 714
+    }
+  ]
+}

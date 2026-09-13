@@ -1,0 +1,7 @@
+//#CLIENTSIDE
+function universe.first() { return 1; }
+function first() { return 2; }
+function second() { return 3; }
+function universe.second() { return 4; }
+public function universe.third() { return 5; }
+function plain() { return 6; }

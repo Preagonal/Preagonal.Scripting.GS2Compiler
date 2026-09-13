@@ -1,0 +1,43 @@
+{
+  "request": {
+    "class_name": "preagonal-parity-join-fixture",
+    "class_script_text": "//#CLIENTSIDE\nfunction parityClassValue() { return 17; }\n",
+    "weapon_script_text": "join(\"preagonal-parity-join-fixture\");\n//#CLIENTSIDE\nfunction onCreated() { temp.value = parityClassValue(); }\n",
+    "class_output_path": "/tmp/gs2-join-class.gs2bc",
+    "weapon_output_path": "/tmp/gs2-join-weapon.gs2bc"
+  },
+  "response": {
+    "class": {
+      "type": "class",
+      "name": "preagonal-parity-join-fixture",
+      "byteCodeBase64": "AAAAAQAAAAQAAAAAAAAAAgAAABUAAAABcGFyaXR5Q2xhc3NWYWx1ZQAAAAADAAAAAAAAAAQAAAAKAfMGFzMKFPMRBw==",
+      "byteCount": 67,
+      "outputPath": "/tmp/gs2-join-class.gs2bc"
+    },
+    "weapon": {
+      "type": "weapon",
+      "name": "-tmpweapon",
+      "byteCodeBase64": "AAAAAQAAAAQAAAAAAAAAAgAAAA4AAAABb25DcmVhdGVkAAAAAAMAAAAXdmFsdWUAcGFyaXR5Q2xhc3NWYWx1ZQAAAAAEAAAAFgHzDhczCgm9FvAAIxcW8AEGMhTzAAc=",
+      "byteCount": 95,
+      "outputPath": "/tmp/gs2-join-weapon.gs2bc"
+    },
+    "npcProperties": [
+      {
+        "packetType": "AddWeaponNPC",
+        "scriptType": "weapon",
+        "scriptName": "-tmpweapon",
+        "rawBase64": "IDBiY2FsYXJtY2xvY2sucG5naiA9cHJlYWdvbmFsLXBhcml0eS1qb2luLWZpeHR1cmU=",
+        "rawHex": "20 30 62 63 61 6c 61 72 6d 63 6c 6f 63 6b 2e 70 6e 67 6a 20 3d 70 72 65 61 67 6f 6e 61 6c 2d 70 61 72 69 74 79 2d 6a 6f 69 6e 2d 66 69 78 74 75 72 65",
+        "imagePropertyId": 0,
+        "image": "bcalarmclock.png",
+        "classPropertyId": 74,
+        "joinedClassNames": "preagonal-parity-join-fixture",
+        "joinedClasses": [
+          "preagonal-parity-join-fixture"
+        ]
+      }
+    ],
+    "temporaryScriptsRemoved": true,
+    "success": true
+  }
+}

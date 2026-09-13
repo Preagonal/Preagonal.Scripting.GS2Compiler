@@ -1,0 +1,8 @@
+{
+  "type": "weapon",
+  "byteCount": 0,
+  "outputPath": "/Users/marlon/Downloads/feature-test.gs2bc",
+  "temporaryScriptRemoved": true,
+  "success": false,
+  "diagnostic": "Official compiler error for weapon '-tmpweapon': error: not enough parameters for array.indices(object) at line 413: temp.idxs = temp.o.indices();"
+}

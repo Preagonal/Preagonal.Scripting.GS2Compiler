@@ -1,0 +1,7 @@
+//#CLIENTSIDE
+function directOr(temp.a,temp.b,temp.c) { if (!(temp.a || temp.b || temp.c)) echo("yes"); }
+function directAnd(temp.a,temp.b,temp.c) { if (!(temp.a && temp.b && temp.c)) echo("yes"); }
+function nestedOr(temp.a,temp.b,temp.c,temp.d) { if (!(temp.a && (temp.b || temp.c || temp.d))) echo("yes"); }
+function nestedAnd(temp.a,temp.b,temp.c,temp.d) { if (!(temp.a || (temp.b && temp.c && temp.d))) echo("yes"); }
+function leftOr(temp.a,temp.b,temp.c,temp.d) { if (!((temp.a || temp.b || temp.c) && temp.d)) echo("yes"); }
+function leftAnd(temp.a,temp.b,temp.c,temp.d) { if (!((temp.a && temp.b && temp.c) || temp.d)) echo("yes"); }

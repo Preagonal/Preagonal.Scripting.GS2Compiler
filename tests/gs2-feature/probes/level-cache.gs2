@@ -1,0 +1,8 @@
+//#CLIENTSIDE
+function repeated() {
+ temp.a=level.name; temp.b=level.x; temp.c=level.y;
+ level.x=1; level.y=2; echo(level.name);
+}
+function loop() { for(temp.i=0;temp.i<2;temp.i++) echo(level.name); }
+function isolated() { temp.a=level.name; }
+function inline() { for(temp.i=0;temp.i<2;temp.i++) temp.a=level.name.length(); }

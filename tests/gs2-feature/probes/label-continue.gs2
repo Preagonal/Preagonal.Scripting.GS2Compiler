@@ -1,0 +1,6 @@
+//#CLIENTSIDE
+function labeled() {
+  outer: for (;true;) {
+    while (true) { continue outer; }
+  }
+}

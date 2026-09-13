@@ -1,0 +1,8 @@
+{
+  "type": "weapon",
+  "byteCount": 0,
+  "outputPath": "/Users/marlon/Downloads/feature-test.gs2bc",
+  "temporaryScriptRemoved": true,
+  "success": false,
+  "diagnostic": "Official compiler error for weapon '-tmpweapon': error: unexpected token: } at line 29: };"
+}

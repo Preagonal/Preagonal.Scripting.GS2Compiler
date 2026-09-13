@@ -1,0 +1,8 @@
+//#CLIENTSIDE
+function strings(temp.s,temp.a) {
+ temp.r=temp.s.starts(temp.a[0]);
+ temp.r=temp.s.ends(temp.a[0]);
+ temp.r=temp.s.starts(3);
+ temp.r=temp.s.ends("x");
+}
+function literals() { echo(null,NULL,Null,nUlL,true,TRUE,True,false,FALSE,False); }

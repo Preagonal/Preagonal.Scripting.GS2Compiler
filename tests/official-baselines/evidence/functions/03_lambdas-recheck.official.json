@@ -1,0 +1,8 @@
+{
+  "type": "weapon",
+  "byteCount": 0,
+  "outputPath": "/tmp/gs2-lambdas-reconciliation.gs2bc",
+  "temporaryScriptRemoved": true,
+  "success": false,
+  "diagnostic": "Official compiler error for weapon '-tmpweapon': error: unexpected token: function at line 29: processWithCallback(function(a, b) {"
+}
