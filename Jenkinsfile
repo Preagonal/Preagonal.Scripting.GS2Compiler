@@ -100,42 +100,49 @@ def buildStepDocker() {
 			stage("Run tests...") {
 				customImage.inside("-u 0") {
 					try{
-						sh("dotnet test /p:UseLocalGSAst=false --logger \"trx;LogFileName=../../Testing/unit_tests.xml\"");
-						sh("dotnet test /p:UseLocalGSAst=false /p:CollectCoverage=true /p:CoverletOutputFormat=opencover");
-						sh("chmod 777 -R .");
+						dir('Testing') {
+							deleteDir();
+						}
+						sh('dotnet test Preagonal.Scripting.GS2Compiler.UnitTests/Preagonal.Scripting.GS2Compiler.UnitTests.csproj /p:UseLocalGSAst=false --results-directory Testing --logger "trx;LogFileName=unit_tests.xml" --collect:"XPlat Code Coverage;Format=opencover"');
+						sh('for report in Testing/*/coverage.opencover.xml; do test -s "$report" || { echo "Coverage report missing or empty: $report" >&2; exit 1; }; done');
 					} catch(err) {
 						currentBuild.result = 'FAILURE'
-						sh("chmod 777 -R .");
 						discordSend(description: "Testing Failed: ${fixed_job_name} #${env.BUILD_NUMBER}", footer: "", link: env.BUILD_URL, result: currentBuild.currentResult, title: "[${split_job_name[0]}] Build Failed: ${fixed_job_name} #${env.BUILD_NUMBER}", webhookURL: env.GS2EMU_WEBHOOK);
 						notify('Build failed')
+						throw err
+					} finally {
+						sh("chmod 777 -R .");
+						archiveArtifacts (
+							artifacts: 'Testing/**/*.xml',
+							allowEmptyArchive: true,
+							fingerprint: true
+						)
+
+						stage("Xunit") {
+							xunit (
+								testTimeMargin: '3000',
+								thresholdMode: 1,
+								thresholds: [
+									skipped(failureThreshold: '1000'),
+									failed(failureThreshold: '0')
+								],
+								tools: [MSTest(
+									pattern: 'Testing/unit_tests.xml',
+									deleteOutputFiles: true,
+									failIfNotNew: false,
+									skipNoTestFiles: false,
+									stopProcessingIfError: true
+								)],
+								skipPublishingChecks: false
+							);
+						}
 					}
 
-					archiveArtifacts (
-						artifacts: 'Testing/**.xml',
-						fingerprint: true
-					)
-
+					if (currentBuild.currentResult != 'SUCCESS') {
+						error('Tests or coverage failed; package publishing is blocked.');
+					}
 					withCredentials([string(credentialsId: 'PREAGONAL_GS2COMPILER_CODECOV_TOKEN', variable: 'CODECOV_TOKEN')]) {
-					    sh('curl -s https://codecov.io/bash > codecov && chmod +x codecov && ./codecov -f Preagonal.Scripting.GS2Compiler.UnitTests/coverage*.opencover.xml -t "$CODECOV_TOKEN"')
-					}
-
-					stage("Xunit") {
-						xunit (
-							testTimeMargin: '3000',
-							thresholdMode: 1,
-							thresholds: [
-								skipped(failureThreshold: '1000'),
-								failed(failureThreshold: '0')
-							],
-							tools: [MSTest(
-								pattern: 'Testing/**.xml',
-								deleteOutputFiles: true,
-								failIfNotNew: false,
-								skipNoTestFiles: true,
-								stopProcessingIfError: true
-							)],
-							skipPublishingChecks: false
-						);
+					    sh('curl -s https://codecov.io/bash > codecov && chmod +x codecov && ./codecov -f Testing/*/coverage.opencover.xml -t "$CODECOV_TOKEN"')
 					}
 				}
 			}
