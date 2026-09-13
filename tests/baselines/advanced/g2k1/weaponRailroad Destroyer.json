@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "e8071eec4d2f2b3ea21f7a0688997d84ff9695263a82755ba4aa8e8834f0ade5",
-  "bytecode_size": 214,
+  "bytecode_hash": "2cf38c33cab02c62773fda3e4102d1445fab617c5468c01ece3993c0d1800af2",
+  "bytecode_size": 213,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/g2k1/weaponRailroad Destroyer.gs2",
     "generated_at": "2026-01-04 18:39:03",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

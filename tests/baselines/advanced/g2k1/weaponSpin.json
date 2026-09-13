@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "29393898cc6a4ce90f66e10195035b898db57af2d62044b31ddd74180582a3b4",
-  "bytecode_size": 630,
+  "bytecode_hash": "c46f53dd1c6f25a08029a7ca160e74e6fb567d35024a8129b72d64c9ef4b054a",
+  "bytecode_size": 629,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/g2k1/weaponSpin.gs2",
     "generated_at": "2026-01-04 18:39:03",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "dd7413457a4f1269edfabd3af5eef41f427d710ae81146556c2e9506e72658e6",
-  "bytecode_size": 90,
+  "bytecode_hash": "a6bc43c57283240bcbc3af40feddb13f8425d64a0d98e6ffd0e0b6b8793bd1d1",
+  "bytecode_size": 89,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/loginserver/weaponTestScript.gs2",
     "generated_at": "2026-01-04 18:39:03",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "8534e99d9d716437c9e255e657274df06f2a3c4c5f197a922e903a05c4648ab3",
-  "bytecode_size": 629,
+  "bytecode_hash": "986884dd64a4f1d581b1c17885a945432a9d41b216b2fa33686c6acea17800f3",
+  "bytecode_size": 628,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weapon+Seeds.gs2",
     "generated_at": "2026-01-04 18:39:04",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

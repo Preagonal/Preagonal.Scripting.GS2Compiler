@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "deb51ce94ff917d169ad797aba6fa1aaa3701381c0c731c59faf7ef4b5b019b4",
-  "bytecode_size": 6137,
+  "bytecode_hash": "821954df3571fe1a065acc95fe3c384f13b552183637aeb9b70e60d312c30ef5",
+  "bytecode_size": 6136,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weaponRemoteControl.gs2",
     "generated_at": "2026-01-04 18:39:05",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

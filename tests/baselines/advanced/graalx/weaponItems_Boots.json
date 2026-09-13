@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "1a6ffe59e2056e6c96a3c5d0feaa8e79b045b20df6eeade83f9f6e9b1ff316e8",
-  "bytecode_size": 723,
+  "bytecode_hash": "389764b55560be955d99ff2d7b7cbfda81bbb5e51646a5c590bb4260fc59af5e",
+  "bytecode_size": 722,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weaponItems_Boots.gs2",
     "generated_at": "2026-01-04 18:39:05",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

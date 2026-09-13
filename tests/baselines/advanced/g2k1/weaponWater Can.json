@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "1d5680473f33227a582a82e179788ece2ffdeebac4b29761724d33d76aceed26",
-  "bytecode_size": 749,
+  "bytecode_hash": "14980b5a6d77c5242de843a01921af5a3eb4155408cba79f6ebb6180b997c82c",
+  "bytecode_size": 748,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/g2k1/weaponWater Can.gs2",
     "generated_at": "2026-01-04 18:39:03",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

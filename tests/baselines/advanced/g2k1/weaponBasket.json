@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "d77481d85e5f9c856795dbe821731e50f96c6e24f1a6845246a315e3205dd406",
-  "bytecode_size": 491,
+  "bytecode_hash": "f327b9477c9ab054c38c597ebef12314b03189c9972c39d4fe8004e7df938899",
+  "bytecode_size": 490,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/g2k1/weaponBasket.gs2",
     "generated_at": "2026-01-04 18:39:03",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

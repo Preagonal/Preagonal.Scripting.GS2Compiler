@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "75a2ceb9d7aa6f70f77c3456687942877dabc536f29dfcc20fe20366238e4e96",
-  "bytecode_size": 652,
+  "bytecode_hash": "66bfc2c35a11f65201c56fac6d57fdefc0ff84bded4e3b64450ead621584daf6",
+  "bytecode_size": 651,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weapon+Hats.gs2",
     "generated_at": "2026-01-04 18:39:04",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

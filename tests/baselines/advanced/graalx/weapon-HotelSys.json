@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "946833f893b0f72fa08ac5e7cf80a79422be29a93535b25172ced832042203e3",
-  "bytecode_size": 3904,
+  "bytecode_hash": "f261d390c75bddb586cf39db04dea04cd7d2e0c78e251afa2d2a6f0812cccb31",
+  "bytecode_size": 3903,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weapon-HotelSys.gs2",
     "generated_at": "2026-01-04 18:39:04",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

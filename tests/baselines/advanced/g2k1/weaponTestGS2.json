@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "fc2ae54949fbce9631c90772cb6b82208bd6fea058b430458e36c5332bf217fd",
-  "bytecode_size": 493,
+  "bytecode_hash": "ae0bbf4bf3431cc928f6b06e299a6dfe3cd9f4fad1c7cbd9bfbf9f188a334f87",
+  "bytecode_size": 492,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/g2k1/weaponTestGS2.gs2",
     "generated_at": "2026-01-04 18:39:03",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "97f660161062b9d791e0493f55fc4ffd1f530ba2e8a78f432104dd5bca0feeb7",
-  "bytecode_size": 3665,
+  "bytecode_hash": "2ae3942c828996f07e9e54db1e5bffe112012b08effedb8554709b0d23a8f0ae",
+  "bytecode_size": 3664,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weapon-News.gs2",
     "generated_at": "2026-01-04 18:39:04",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

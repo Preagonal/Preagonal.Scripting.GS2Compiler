@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "35b9e972008598209c3021c7d859e9b82f83834a51029fab52a408dec59cdea6",
-  "bytecode_size": 2608,
+  "bytecode_hash": "31ff6fbed557d980db9b86ab5773dd344ef05e6e4bd2015112d9c8a1331fa9c9",
+  "bytecode_size": 2607,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/loginserver/weapon-Staff_GUIExplorer.gs2",
     "generated_at": "2026-01-04 18:39:03",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

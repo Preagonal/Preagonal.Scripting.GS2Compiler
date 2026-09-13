@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "50995b256f9b81954eee2bc497d2c11ee9a60b24d95f2e9d4a704371387f695b",
-  "bytecode_size": 394,
+  "bytecode_hash": "60d02119f6935ef5f1927f9204bc94421352a107ff041895ca7249a717e11cdb",
+  "bytecode_size": 393,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weapon+Food.gs2",
     "generated_at": "2026-01-04 18:39:04",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

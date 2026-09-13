@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "50f129e551272084aff8a3e5a38d52ce8c44622b5989b2af79eabc70031f4283",
-  "bytecode_size": 605,
+  "bytecode_hash": "075244846ecc0f0ca564ced7f6da3d506ee7f57d77f4142ade7d187f396bdd23",
+  "bytecode_size": 604,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "classes/02_arrays.gs2",
     "generated_at": "2026-01-04 18:39:02",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

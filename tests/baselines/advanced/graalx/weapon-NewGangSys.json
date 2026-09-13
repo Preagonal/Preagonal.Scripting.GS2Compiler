@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "55b6085102e848a1f84419e94a6892dcff39172afb86e214fc91c565be82fccf",
-  "bytecode_size": 961,
+  "bytecode_hash": "f903e803e9afe3164448bc2aba1eb19137c330c0a0c84008378e42cf02095b5f",
+  "bytecode_size": 960,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weapon-NewGangSys.gs2",
     "generated_at": "2026-01-04 18:39:03",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

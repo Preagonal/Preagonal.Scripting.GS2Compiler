@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "13bed61974a3dfc3dba5fef1d4924cbdb32391d6c58ab3daa57d4e6d3751854c",
-  "bytecode_size": 1256,
+  "bytecode_hash": "6558612624d36d199e08dbce153fb5e8390a325cc18d918e26e468cd57181602",
+  "bytecode_size": 1255,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/g2k1/weapon-Staff_Boots.gs2",
     "generated_at": "2026-01-04 18:39:03",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

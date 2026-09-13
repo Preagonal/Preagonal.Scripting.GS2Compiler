@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "f0f788cabcb6e95a9a2384b7aa4526e78335dc8bec30f0cca329a64ecb104d80",
-  "bytecode_size": 898,
+  "bytecode_hash": "55f93654129990e14edb0395e78f83ccf8a2b168ce2da1dfe3c2ab9b258bdc2f",
+  "bytecode_size": 897,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "functions/03_lambdas.gs2",
     "generated_at": "2026-01-04 18:39:03",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "0dd4709d887e83a03446c150d51699b0aeb52e183ca2e0771997df875be88a16",
-  "bytecode_size": 1894,
+  "bytecode_hash": "5916efdba5c89d6d1e8e737a944c4ce4f472540551199cb98406fbe27bcfbb1f",
+  "bytecode_size": 1893,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/g2k1/weapon-Day-Night.gs2",
     "generated_at": "2026-01-04 18:39:03",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

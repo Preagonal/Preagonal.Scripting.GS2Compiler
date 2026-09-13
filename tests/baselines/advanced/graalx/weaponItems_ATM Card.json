@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "e06f5fcc35d5194d0e9825d9bc09c85a82e7e274ab5fd6d048d4ff39fa4faf95",
-  "bytecode_size": 352,
+  "bytecode_hash": "ff0fa9f1ce6d76f2597d176f02e818951e5f73ad74e9755080e54e752cca189f",
+  "bytecode_size": 351,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weaponItems_ATM Card.gs2",
     "generated_at": "2026-01-04 18:39:05",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

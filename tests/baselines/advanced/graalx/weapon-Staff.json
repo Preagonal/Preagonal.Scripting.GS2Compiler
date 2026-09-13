@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "8d9de00d12d7c11ed6eec85528a4939471dc64f8b5e6d76fe9c40aaf6603f817",
-  "bytecode_size": 1086,
+  "bytecode_hash": "95f75a6f39923a0a3331c840c268327da4ccc6ee489ac1cd61a286c235c74003",
+  "bytecode_size": 1085,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weapon-Staff.gs2",
     "generated_at": "2026-01-04 18:39:05",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

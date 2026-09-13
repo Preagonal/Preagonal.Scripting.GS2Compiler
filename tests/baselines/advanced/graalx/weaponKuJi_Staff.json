@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "0ba6b45f35989a8b348de4b5764afbfe5b2802c79a40fabc6345c871fb02a720",
-  "bytecode_size": 2154,
+  "bytecode_hash": "8f6dd7326bba4a315b1baf88239a00e81d764902233d4540c842500de12a5984",
+  "bytecode_size": 2153,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weaponKuJi_Staff.gs2",
     "generated_at": "2026-01-04 18:39:05",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

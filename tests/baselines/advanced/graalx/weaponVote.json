@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "56c721a41193a6bfd9355c41653ef3b8d7491576fab555aa8179db52b45bc804",
-  "bytecode_size": 2438,
+  "bytecode_hash": "5a69b7c3603316cff88ee1a4c79c901b50ff2f2bd57d88320a82929da0d6a6b5",
+  "bytecode_size": 2437,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weaponVote.gs2",
     "generated_at": "2026-01-04 18:39:04",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

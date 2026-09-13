@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "d8bf2367333329743bd591c81ceb7494614eff1bafb6b9ea4416a45400f87746",
-  "bytecode_size": 5004,
+  "bytecode_hash": "f5eafd61522d714ddb2b5c85d91c8b940ea0b0bd7b3f59056306fea18e8c6202",
+  "bytecode_size": 5003,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/loginserver/weapon-IRC_Installer.gs2",
     "generated_at": "2026-01-04 18:39:03",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

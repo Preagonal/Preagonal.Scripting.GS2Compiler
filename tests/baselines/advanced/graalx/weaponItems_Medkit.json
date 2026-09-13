@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "0314221e9724262068ddecacfb756fd5a0f4d4af00f09d07936d52d6b4287c89",
-  "bytecode_size": 602,
+  "bytecode_hash": "3576915770589d9622f0c6a35493d5c169e03192eb89b6b7309f5829aa886af6",
+  "bytecode_size": 601,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weaponItems_Medkit.gs2",
     "generated_at": "2026-01-04 18:39:05",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

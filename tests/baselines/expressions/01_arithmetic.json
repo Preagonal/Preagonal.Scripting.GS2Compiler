@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "dca1a6d16cf625f269fa0ad417835f69c8f9e491004fa8cf089ae8f2aff89869",
-  "bytecode_size": 318,
+  "bytecode_hash": "b2e8a4a7365c0c6fe6ec8e5b3200d00aad25f7d8b3b64654077b37d1426e2814",
+  "bytecode_size": 317,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "expressions/01_arithmetic.gs2",
     "generated_at": "2026-01-04 18:39:02",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

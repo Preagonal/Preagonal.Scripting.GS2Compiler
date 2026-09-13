@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "338664389f31bf95d56a20db55df69c0f567aa02d101feeee77ca928f0a8429a",
-  "bytecode_size": 134,
+  "bytecode_hash": "d4e8855b4061e515ddf4aa2838b5358df847ef40308a72f3aaf2d875df0ab403",
+  "bytecode_size": 133,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/g2k1/weapon-Systems_Main.gs2",
     "generated_at": "2026-01-04 18:39:03",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "eb373bdfa6f39a848c4f71e73eb95aeb0ebb8f0f375daccc6d20c1d66b30c8a3",
-  "bytecode_size": 898,
+  "bytecode_hash": "3d41b0b2c06d2c5e04e0973a3dfa854a50499e1df2eefac7614bec7cce3d0709",
+  "bytecode_size": 897,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weaponJobs_Stack.gs2",
     "generated_at": "2026-01-04 18:39:04",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

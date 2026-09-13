@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "68d481fe5d17e215d07e7b214b8215308896c2806e449b12fca1b2c51f5ca8ef",
-  "bytecode_size": 321,
+  "bytecode_hash": "c2591318efe38f665412c330b119d13fb726fd9ee4e935ecc4eca0760aa8d69e",
+  "bytecode_size": 320,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "expressions/02_comparison.gs2",
     "generated_at": "2026-01-04 18:39:02",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

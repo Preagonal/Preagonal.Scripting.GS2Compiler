@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "86de1e62052297dcf26487dbebf87486017203ec4735ef293eb29acadc5e32bc",
-  "bytecode_size": 63,
+  "bytecode_hash": "388f2ec59a10526d016c5ba7dd1e343b0faec02755872d3ba59e00f1bdd29b3c",
+  "bytecode_size": 62,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weaponLevelGen.gs2",
     "generated_at": "2026-01-04 18:39:05",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

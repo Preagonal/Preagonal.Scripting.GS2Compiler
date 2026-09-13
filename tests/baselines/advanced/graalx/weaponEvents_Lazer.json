@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "e1127634c4935171b2e956538f867b0a69fa24c0b51fcbf93451a40954b8e1cb",
-  "bytecode_size": 1882,
+  "bytecode_hash": "c724cd74afce61ed670b1903d4bea3e3554f6d7168efe9a2c92dea1a7857d523",
+  "bytecode_size": 1881,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weaponEvents_Lazer.gs2",
     "generated_at": "2026-01-04 18:39:05",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

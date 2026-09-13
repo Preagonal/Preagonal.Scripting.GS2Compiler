@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "7157843176093bc96a9de41e0400de1de9df8e2e83f00b94a099cfd14a79ad01",
-  "bytecode_size": 2287,
+  "bytecode_hash": "cde2826b7c91312e2c35f113f910c2786751eb7a3c087806248611a68f09233a",
+  "bytecode_size": 2286,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weapon-Weather.gs2",
     "generated_at": "2026-01-04 18:39:04",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

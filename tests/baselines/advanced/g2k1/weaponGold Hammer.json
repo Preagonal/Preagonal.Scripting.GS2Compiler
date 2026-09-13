@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "31d9fffb7d4dcc1b1a32b363d68688720e776196be026455cad56c5686a89d5e",
-  "bytecode_size": 234,
+  "bytecode_hash": "5c8f9feb6bb7c3dbf3bde0d9cf6aa19c9f1a57ee0e266020dec3764a79ba04b1",
+  "bytecode_size": 233,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/g2k1/weaponGold Hammer.gs2",
     "generated_at": "2026-01-04 18:39:03",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

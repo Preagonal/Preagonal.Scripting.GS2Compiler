@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "d9b5b2a140c08a87c80728b683d2350cd6842984c796f53088ec75339c2d5e65",
-  "bytecode_size": 986,
+  "bytecode_hash": "0d21e8683205aa21fbc702d7db8c9b2300e2f6a05a4bf2da079d6ff19a00a731",
+  "bytecode_size": 985,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/loginserver/weapon-ReShared.gs2",
     "generated_at": "2026-01-04 18:39:03",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

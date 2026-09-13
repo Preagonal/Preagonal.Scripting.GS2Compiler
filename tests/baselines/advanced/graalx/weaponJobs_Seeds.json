@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "776851bd73fd2c6c1098b3039d922587e64eb5242b2f07df9081be2dec275f58",
-  "bytecode_size": 836,
+  "bytecode_hash": "136d1e4236fd69ea87c5611990649a69a8092224a745e0cda50441b159ef0292",
+  "bytecode_size": 835,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weaponJobs_Seeds.gs2",
     "generated_at": "2026-01-04 18:39:03",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

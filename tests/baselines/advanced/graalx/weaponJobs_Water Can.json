@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "6296a9f56cfa93998425c3d85ae3442c8e209e2cfbe15b286b2921cba230d892",
-  "bytecode_size": 1235,
+  "bytecode_hash": "3234020c7e26afc4f64aae585b826737b49c5292ee85a95a2cde700466bc9c5c",
+  "bytecode_size": 1234,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weaponJobs_Water Can.gs2",
     "generated_at": "2026-01-04 18:39:05",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

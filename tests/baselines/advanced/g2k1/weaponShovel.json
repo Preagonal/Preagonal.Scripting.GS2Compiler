@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "470c335babb7bee807b683e0c517e875b13ec68ac2ecf44bc9a2a17201a681c5",
-  "bytecode_size": 786,
+  "bytecode_hash": "17d3a781cdb0eee8b0747fe462fb847f8489b7e07d9f76cc07f812c92a2ba1cc",
+  "bytecode_size": 785,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/g2k1/weaponShovel.gs2",
     "generated_at": "2026-01-04 18:39:03",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

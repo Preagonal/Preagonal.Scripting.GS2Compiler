@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "f30b07110f02397e3453cd3fb72c1b8d8c252c0bbde57da8fc2d53ac64c047d9",
-  "bytecode_size": 381,
+  "bytecode_hash": "b82f3020617211ae5fd969a5f468cd2d838117f22dce9275d7c18c269a755858",
+  "bytecode_size": 380,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weaponSystems_Party.gs2",
     "generated_at": "2026-01-04 18:39:04",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

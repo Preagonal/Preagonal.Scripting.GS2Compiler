@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "153196be93643a34e654128643f29ceca33e2faad908d01ae5c169552b71503f",
-  "bytecode_size": 238,
+  "bytecode_hash": "b595c35e1ed2410d15e2618d478b80fb06436e1888a5e488f5bf37b90244abad",
+  "bytecode_size": 237,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/g2k1/weaponDiamond Axe.gs2",
     "generated_at": "2026-01-04 18:39:03",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

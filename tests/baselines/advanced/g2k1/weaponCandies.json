@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "66a280e2b52f34f38ea23d0125f55ffa3ef8bda37e019d81b494c66e4814cdea",
-  "bytecode_size": 568,
+  "bytecode_hash": "2949924f8652f2265aa31a32ccd348e14df97ad866e548c3fb35daa459aaec06",
+  "bytecode_size": 567,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/g2k1/weaponCandies.gs2",
     "generated_at": "2026-01-04 18:39:03",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

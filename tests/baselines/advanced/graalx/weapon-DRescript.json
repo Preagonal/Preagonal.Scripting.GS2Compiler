@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "f1c3a227396334e3c4fd5b92b97f1eaa8a678a85c15525228bf8ff5ba3224426",
-  "bytecode_size": 38,
+  "bytecode_hash": "d38a547007d2985a5d1885a8b4161bff3168fb06fd4183a353233494ad070e38",
+  "bytecode_size": 37,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weapon-DRescript.gs2",
     "generated_at": "2026-01-04 18:39:04",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

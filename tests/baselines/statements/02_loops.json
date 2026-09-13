@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "ca08e993e826d49b45daf8ada45ef42bed9a9abf5722e9111c2a0b8c57265f50",
-  "bytecode_size": 375,
+  "bytecode_hash": "7ea46b3fe026faba00b3c2e7fe7cf2adcb6dd74401b9504f9336a77063911fd6",
+  "bytecode_size": 374,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "statements/02_loops.gs2",
     "generated_at": "2026-01-04 18:39:02",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

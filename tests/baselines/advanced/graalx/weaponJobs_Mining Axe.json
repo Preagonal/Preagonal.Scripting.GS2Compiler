@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "b1756d64620d421658c6ed5a4d1876fc8cfe671d0cbfa83c60b1d65f1c44b6e5",
-  "bytecode_size": 1496,
+  "bytecode_hash": "03451190159bbcdc4b325298458c94a7c357fe31b5dd7bd91401fc5d54923bc4",
+  "bytecode_size": 1495,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weaponJobs_Mining Axe.gs2",
     "generated_at": "2026-01-04 18:39:04",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

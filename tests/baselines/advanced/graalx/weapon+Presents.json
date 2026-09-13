@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "b4595c781c72817db11929856bbecaf6ba5f1e7b5405771619f57cd083abd47a",
-  "bytecode_size": 205,
+  "bytecode_hash": "c3f58a42b6b71b7526f8eec2cb93774c687da67bad012cada9a803a4837fefed",
+  "bytecode_size": 204,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weapon+Presents.gs2",
     "generated_at": "2026-01-04 18:39:04",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

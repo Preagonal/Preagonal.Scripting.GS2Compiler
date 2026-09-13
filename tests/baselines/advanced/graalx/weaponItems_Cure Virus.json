@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "49044a9e8fb2fbf7b9447ccdbfb35c474790baf6131be7e085afff607f40899c",
-  "bytecode_size": 223,
+  "bytecode_hash": "d5629fef735aa2a0dea9d0fd9309d63780da00367c24529d48b5bdb7dff74343",
+  "bytecode_size": 222,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weaponItems_Cure Virus.gs2",
     "generated_at": "2026-01-04 18:39:05",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

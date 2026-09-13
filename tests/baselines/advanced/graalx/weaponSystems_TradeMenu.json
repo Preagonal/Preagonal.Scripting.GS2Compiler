@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "245b71c36dc7914792d724dbd4230cb4f3e9b2e7aacf1efcdfb9edbf4f0f795d",
-  "bytecode_size": 684,
+  "bytecode_hash": "d37ae7ed925d70cbb422b2d6c2e5eb6877a2aa5459663d02a8a1faf58f7bfcee",
+  "bytecode_size": 683,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weaponSystems_TradeMenu.gs2",
     "generated_at": "2026-01-04 18:39:04",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

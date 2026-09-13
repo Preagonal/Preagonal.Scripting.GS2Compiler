@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "0dcbd1231182115085b113316041c727566d7b221580df00454c6d820b0551e2",
-  "bytecode_size": 440,
+  "bytecode_hash": "464c478bd0b5a60d8ad3cdb467b9283bfcb2938e5be3aace533d0687730a242f",
+  "bytecode_size": 439,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weapon-Functions.gs2",
     "generated_at": "2026-01-04 18:39:04",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

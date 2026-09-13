@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "f2863e0f6d6d27376f8d4f0c8f4f4204d36a25d86a80f50586f8a0d9b8d62559",
-  "bytecode_size": 6953,
+  "bytecode_hash": "c5289fc9c6c76bfeab1037e872e4c40236dfecc425e3a589ae1106ffd2b651e1",
+  "bytecode_size": 6952,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weapon-Movement2.gs2",
     "generated_at": "2026-01-04 18:39:04",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

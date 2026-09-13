@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "24cf0ab3b1fef6c0baa3ae5c0530e715d3bb1e49932aabdac62e68bda0ee9d3c",
-  "bytecode_size": 393,
+  "bytecode_hash": "ecb83e7d4580393624d024f8fc9e22ec23b76ba8eb660d4575d6d4ef145bfadc",
+  "bytecode_size": 392,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "functions/02_recursion.gs2",
     "generated_at": "2026-01-04 18:39:03",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

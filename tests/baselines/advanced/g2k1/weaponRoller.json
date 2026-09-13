@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "7ae9f4893b09a18c785cc875afff9eaf1be2f7467df6041c937c4532adb517c8",
-  "bytecode_size": 368,
+  "bytecode_hash": "47d471d61932be6ddae284b72f6a74f78d5c10cb80801f8f38f292be232b612a",
+  "bytecode_size": 367,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/g2k1/weaponRoller.gs2",
     "generated_at": "2026-01-04 18:39:03",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

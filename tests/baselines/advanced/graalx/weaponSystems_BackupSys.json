@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "595453a37e9c5b749f27b71a0ace0c17eccf98ff94e96039fd1722d13bae7aa5",
-  "bytecode_size": 493,
+  "bytecode_hash": "952fca8bfcaada79cef05cfbf90817e6009cac187b92032e5742f4eebbee5c24",
+  "bytecode_size": 492,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weaponSystems_BackupSys.gs2",
     "generated_at": "2026-01-04 18:39:04",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "1cf96d139589f98c4abd7b32cdd7124c3f012158f3b77605c24ef36816b27670",
-  "bytecode_size": 234,
+  "bytecode_hash": "1da53beb250c2c7fe6788ec25780fb79b4d84f494d3bdf91c6c107e468da3a10",
+  "bytecode_size": 233,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/g2k1/weaponWooden Hammer.gs2",
     "generated_at": "2026-01-04 18:39:03",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

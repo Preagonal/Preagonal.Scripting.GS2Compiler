@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "c9ed2a9c6002d376a6ae53d6be169d7ca6d6d0f89f5cb5a7710ec7d508fdea6b",
-  "bytecode_size": 292,
+  "bytecode_hash": "cf5c48af2bd61b704285a5be73d1b1a28510f21951ebae8f31516e8b60f6e0ef",
+  "bytecode_size": 291,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weapon-Shake.gs2",
     "generated_at": "2026-01-04 18:39:04",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

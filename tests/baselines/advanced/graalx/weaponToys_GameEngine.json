@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "cf9385f26031b7947cdba9baf1922cebb0b164bcf6bcb9b7cbcc44a156749691",
-  "bytecode_size": 2540,
+  "bytecode_hash": "d2f5aaa16d1b803718c90ae4ad379f92db3402e82fe4bd67a198f6c39f8f8694",
+  "bytecode_size": 2539,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weaponToys_GameEngine.gs2",
     "generated_at": "2026-01-04 18:39:04",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

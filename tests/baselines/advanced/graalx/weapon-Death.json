@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "ddfc59b16026d30d4041917992bf7415e9f73b083359bed86ff986b38d54f431",
-  "bytecode_size": 2664,
+  "bytecode_hash": "8ac163aff2c7c7f404724d940c30b83bf79ae1685ccc8ebb28ee2c2c61630aa9",
+  "bytecode_size": 2663,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weapon-Death.gs2",
     "generated_at": "2026-01-04 18:39:05",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

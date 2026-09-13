@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "13879f5cb6ca26bde9bcfb7dec3e76a8f114efa4a45b5cc56036ebc9c41de6b3",
-  "bytecode_size": 2823,
+  "bytecode_hash": "1415120199ec96cef721cc5906d48c7258776768bf53d5d477ca6fa38798d7e3",
+  "bytecode_size": 2822,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weapon-NewMovement.gs2",
     "generated_at": "2026-01-04 18:39:04",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

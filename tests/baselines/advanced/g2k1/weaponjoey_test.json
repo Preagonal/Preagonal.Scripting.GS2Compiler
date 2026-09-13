@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "6dddbe6424f465f74094378cefae3501dba80d8ba360516e205baf1bbfe2cff5",
-  "bytecode_size": 1436,
+  "bytecode_hash": "9608c7e23c747c9f7e75fbedf8d5d1abe336c79a95d5aee2ab5bbb6fa6b10b11",
+  "bytecode_size": 1435,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/g2k1/weaponjoey_test.gs2",
     "generated_at": "2026-01-04 18:39:03",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

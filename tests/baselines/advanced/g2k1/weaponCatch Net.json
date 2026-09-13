@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "f684686af2318e556eaf80630649e6f15f5486e89f4fde598da04a696b5cd68e",
-  "bytecode_size": 640,
+  "bytecode_hash": "4628196b6798b6d310d5f4b11ca0ce98098b31c53535ca714fb48561cf36adab",
+  "bytecode_size": 639,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/g2k1/weaponCatch Net.gs2",
     "generated_at": "2026-01-04 18:39:03",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

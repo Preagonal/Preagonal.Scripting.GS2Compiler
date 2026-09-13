@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "fceaec3c508b0816f8031ee17eed269ebae30f0a69bf1b8bef0d58354aa9c9c7",
-  "bytecode_size": 464,
+  "bytecode_hash": "d9e6c9ce6ea3846d58b4388cb3cba779a506340db16403c545d44bb71976fceb",
+  "bytecode_size": 463,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weaponJobs_Mining TNT.gs2",
     "generated_at": "2026-01-04 18:39:05",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }

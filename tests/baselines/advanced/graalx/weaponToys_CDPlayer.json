@@ -1,12 +1,12 @@
 {
-  "bytecode_hash": "f140f898fb57e6da937fabc001e23a4b08e716b1b2db7dbb24d14c4401255c44",
-  "bytecode_size": 3336,
+  "bytecode_hash": "110d4d42427e822a02fd2aee91a5bf1587390e1a517101b01c5b1bfd01a27a83",
+  "bytecode_size": 3335,
   "compilation_success": true,
   "expected_failure": false,
   "error_message": "",
   "metadata": {
     "script_path": "advanced/graalx/weaponToys_CDPlayer.gs2",
     "generated_at": "2026-01-04 18:39:05",
-    "compiler_version": "modified_1767569912"
+    "compiler_version": "fixed_trailing_ret_20260913"
   }
 }
