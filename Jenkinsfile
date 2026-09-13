@@ -83,7 +83,7 @@ def buildStepDocker() {
 			stage("Building NuGet Package") {
 				customImage.inside("-u 0") {
 					sh("chmod 777 -R .");
-					sh("dotnet pack Preagonal.Scripting.GS2Compiler/Preagonal.Scripting.GS2Compiler.csproj -c Release ${VER}");
+					sh("dotnet pack Preagonal.Scripting.GS2Compiler/Preagonal.Scripting.GS2Compiler.csproj -c Release /p:UseLocalGSAst=false ${VER}");
 					sh("chmod 777 -R .");
 				}
 			}
@@ -100,8 +100,8 @@ def buildStepDocker() {
 			stage("Run tests...") {
 				customImage.inside("-u 0") {
 					try{
-						sh("dotnet test --logger \"trx;LogFileName=../../Testing/unit_tests.xml\"");
-						sh("dotnet test /p:CollectCoverage=true /p:CoverletOutputFormat=opencover");
+						sh("dotnet test /p:UseLocalGSAst=false --logger \"trx;LogFileName=../../Testing/unit_tests.xml\"");
+						sh("dotnet test /p:UseLocalGSAst=false /p:CollectCoverage=true /p:CoverletOutputFormat=opencover");
 						sh("chmod 777 -R .");
 					} catch(err) {
 						currentBuild.result = 'FAILURE'
