@@ -337,67 +337,6 @@ public class InterfaceTests
 	}
 
 	[Fact]
-	public void Given_official_accepted_gs1_hilt_weapon_script_When_compiling_with_gs1_grammar_Then_bytecode_matches_official()
-	{
-		const string scriptText = """
-		                          			//#CLIENTSIDE
-		                          			if(isweapon){
-		                          			  if(playerenters||playerendsreading){
-		                          			    if(haveswordlvl3||hasweapon(*Sword of Zol)) destroy;
-		                          			  }
-		                          			}else{
-		                          			  if (playerenters) {
-		                          			    hidelocal;
-		                          			    for(this.i=0;this.i<4;this.i++){
-		                          			      if(this.i<2) showimg this.i,icespell.mng,x+(this.i%2),y;
-		                          			      else showimg this.i,icespell.mng,x+(this.i%2),y+1;
-		                          			      changeimgvis this.i,0;
-		                          			    }
-		                          			    this.putx=26;
-		                          			    this.puty=54;
-		                          			    timereverywhere;
-		                          			    timeout=0.05;
-		                          			  }
-		                          			  if (timeout) {
-		                          			    this.hole=0;
-		                          			    for (this.i=0;this.i<2; this.i++){
-		                          			      for (this.j=0;this.j<2;this.j++) {
-		                          			        this.b=board[this.putx+this.i+64*(this.puty+this.j)];
-		                          			        this.bx = this.b % 16;
-		                          			        this.by = int(this.b / 16);
-		                          			        if (!(this.bx==8&&this.by==167)) this.hole=1;
-		                          			      }
-		                          			    }
-		                          			    if(this.hole>0){
-		                          			      if(!hasweapon(Hilt)&&!haveswordlvl3&&!visible){
-		                          			        showlocal;
-		                          			        say 0;
-		                          			      }
-		                          			      timereverywhere;
-		                          			      timeout=3;
-		                          			    }else{
-		                          			      timereverywhere;
-		                          			      timeout=0.05;
-		                          			    }
-		                          			  }
-		                          			  if(playertouchsme){
-		                          			    hidelocal;
-		                          			    toweapons Hilt;
-		                          			  }
-		                          			}
-		                          			if(weaponfired && isweapon) say2 It's the hilt from The Sword #bof Zol, lost long ago!;
-		                          """;
-		var officialBytecode = Convert.FromBase64String(
-			"AAAAAQAAAAQAAACDAAAAAgAAAAAAAAADAAABRWlzd2VhcG9uAHBsYXllcmVudGVycwBwbGF5ZXJlbmRzcmVhZGluZwBoYXZlc3dvcmRsdmwzACpTd29yZCBvZiBab2wAZmluZHdlYXBvbgBkZXN0cm95AGhpZGVsb2NhbABpAHkAeABpY2VzcGVsbC5tbmcAc2hvd2ltZwBjaGFuZ2VpbWd2aXMAcHV0eABwdXR5AHRpbWVyZXZlcnl3aGVyZQB0aW1lb3V0AGlzdGltZW91dABob2xlAGoAYgBib2FyZABieABieQBIaWx0AHZpc2libGUAc2hvd2xvY2FsAHNheQBwbGF5ZXJ0b3VjaHNtZQB0b3dlYXBvbnMAd2VhcG9uZmlyZWQASXQncyB0aGUgaGlsdCBmcm9tIFRoZSBTd29yZCAjYm9mIFpvbCwgbG9zdCBsb25nIGFnbyEAc2F5MgAAAAAEAAACQBbwACEE8xgW8AEhA/MIFvACIQT0ASYW8AMhA/MSFxXwBBbwBQYaRwT0ASYXFvAGBiAB9AEmFvABIQTzehcW8AcGILQW8AgjFPMAMrQW8AgjIRTzBEgE82kJtBbwCCMhFPMCSATzRhcW8AkW8AohtBbwCCMhFPMCQDwV8Au0FvAIIxbwDAYgAfNbFxbwCSEU8wE8FvAKIbQW8AgjIRTzAkA8FfALtBbwCCMW8AwGIBcU8wC0FvAIIxbwDQYgtBbwCCM0IAHzJLQW8A4jFPMaMrQW8A8jFPM2MhcW8BAGIBbwERT2MC4wNQAyFvASIQT0ARq0FvATIxTzADK0FvAIIxTzADK0FvAIIyEU8wJIBPQA6wm0FvAUIxTzADK0FvAUIyEU8wJIBPQA5Qm0FvAVIxbwFiS0FvAOIyG0FvAIIyE8FPNAtBbwDyMhtBbwFCMhPD48gzK0FvAXI7QW8BUjIRTzEEAytBbwGCO0FvAVIyEU8xA/VTK0FvAXIxTzCEYF9ADYtBbwGCMU9ACnRkQE9ADftBbwEyMU8wEytBbwFCM0IAH0AJS0FvAIIzQgAfQAh7QW8BMjIRTzAEkE9AETFxXwGRbwBQYaR0QE9AELFvADIUQE9AELFvAaIUQE9AELFxbwGwYgFxTzABbwHAYgFxbwEAYgFvARFPMDMgH0ARoXFvAQBiAW8BEU9jAuMDUAMhbwHSEE9AEmFxbwBwYgFxXwGRbwHgYgFvAfIQT0ATEW8AAhBPQBMRcV8CAW8CEGIA=="
-		);
-
-		var result = Interface.CompileCode(scriptText, withHeader: false, grammar: ScriptGrammar.GS1);
-
-		Assert.True(result.Success, result.ErrMsg);
-		Assert.Equal(officialBytecode, result.ByteCode);
-	}
-
-	[Fact]
 	public void Given_script_with_continue_When_compiling_Then_success_is_true_and_bytecode_is_not_empty()
 	{
 		const string scriptText = """

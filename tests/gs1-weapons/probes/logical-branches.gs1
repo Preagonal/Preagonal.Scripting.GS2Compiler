@@ -1,4 +1,0 @@
-//#CLIENTSIDE
-if ((a&&b)||c) destroy;
-if ((a&&(b||c))||(d&&e)) hidelocal;
-if ((a&&b)||(c&&d)) showlocal;

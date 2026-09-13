@@ -1,9 +1,0 @@
-{
-  "type": "weapon",
-  "name": "-tmpweapon",
-  "byteCodeBase64": "AAAAAQAAAAQAAAAAAAAAAgAAABgAAAABegAAAAASYQAAAAAobQAAAABDbgAAAAADAAAAJ2EucG5nAHNldGltZwBiLnBuZwBjLnBuZwBkLnBuZwBoaWRlaW1nAAAAAAQAAAChAfNdFzMKCRcV8AAW8AEGIBcV8AIW8AEGIBTzAAcB810XMwoJFxXwABbwAQYgFxXwAhbwAQYgFxXwAxbwAQYgFPMABwHzXRczCgkXFfAAFvABBiAXFfACFvABBiAXFfADFvABBiAXFfAEFvABBiAU8wAHAfNdFzMKCRcU8wEW8AUGIBcU8wIW8AUGIBcU8wMW8AUGIBcU8wQW8AUGIBTzAAc=",
-  "byteCount": 260,
-  "outputPath": "/tmp/gbot.gs2bc",
-  "temporaryScriptRemoved": true,
-  "success": true
-}

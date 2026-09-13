@@ -1,4 +1,0 @@
-//#CLIENTSIDE
-function five(){ setimg a; setimg b; setimg c; setimg d; setimg e; }
-function six(){ setimg a; setimg b; setimg c; setimg d; setimg e; setimg f; }
-function seven(){ hideimg 1; hideimg 2; hideimg 3; hideimg 4; hideimg 5; hideimg 6; hideimg 7; }

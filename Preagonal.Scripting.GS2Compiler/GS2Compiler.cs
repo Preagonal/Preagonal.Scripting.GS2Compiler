@@ -769,7 +769,8 @@ internal static class GS2Compiler
 				if (context is not GS1Parser.StatementBuiltInCommandContext command) throw Failure(context);
 				var name                                                                           = command.COMMAND().GetText().Trim();
 				var args                                                                           = command.builtInCommandExpression().Select(BuildBuiltInCommandExpression).ToList();
-				for (var i = 0; i < args.Count && (name != "triggeraction" || i < 4); ++i) args[i] = TrimArgument(args[i]);
+				var parameterStart = name switch { "triggeraction" => 3, "setshootparams" => 0, _ => args.Count };
+				for (var i = 0; i < args.Count && i <= parameterStart; ++i) args[i] = TrimArgument(args[i]);
 				if (name is "set" or "unset" && args.Count == 1)
 				{
 					var target = new DynamicVarExpr(new StringExpr(command.builtInCommandExpression(0).GetText().Trim()));
@@ -798,17 +799,23 @@ internal static class GS2Compiler
 					return new(new MethodCallExpr(new DynamicVarExpr(BuildText(command.builtInCommandExpression(0))), "replace", [new CastExpr("float", args[1]), AsString(args[2])]) { IsGs1Embedded = true });
 				if (name == "removestring" && args.Count == 2)
 					return new(new MethodCallExpr(new DynamicVarExpr(BuildText(command.builtInCommandExpression(0))), "remove", [AsString(args[1])]) { IsGs1Embedded = true });
-				if (name == "triggeraction" && args.Count > 4)
+				if (args.Count > parameterStart + 1)
 				{
-					var parameters                                    = args[3];
-					foreach (var argument in args.Skip(4)) parameters = AppendText(AppendText(parameters, new StringExpr(",")), argument);
-					args = [.. args.Take(3), parameters];
+					var parameters = args[parameterStart];
+					foreach (var argument in args.Skip(parameterStart + 1)) parameters = AppendParameterText(AppendText(parameters, new StringExpr(",")), argument);
+					args = [.. args.Take(parameterStart), parameters];
 				}
 
 				return new(new CallExpr(name, args));
 			}
 
 			private static Expr AsString(Expr expression) => expression is StringExpr or StringCastExpr or BinaryExpr { Op: "@" } ? expression : new StringCastExpr(expression);
+
+			// The grammar splits comma-separated parameters, but GS1 passes one interpolated string.
+			[System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+			private static Expr AppendParameterText(Expr left, Expr right) => right is BinaryExpr { Op: "@" } text
+				? AppendParameterText(AppendParameterText(left, text.Left), text.Right)
+				: AppendText(left, right);
 
 			private static Expr TrimArgument(Expr expression) =>
 				expression switch

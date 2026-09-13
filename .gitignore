@@ -400,3 +400,13 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# Borrowed GS1 corpus and regression evidence stay local.
+/weapons_to_test/
+/world_files_to_test/
+/tests/gs1-weapons/*
+!/tests/gs1-weapons/README.md
+/tests/gs1-levels/
+/tests/private-gs1/
+/Preagonal.Scripting.GS2Compiler.UnitTests/Gs1WeaponParityTests.cs
+/Preagonal.Scripting.GS2Compiler.UnitTests/Gs1LevelParityTests.cs

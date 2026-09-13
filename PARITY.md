@@ -1,5 +1,9 @@
 # GS2 parity progress
 
+Latest ordered-world checkpoint: all nine NPCs across `-alien.nw`, `-gnome.nw`, `-vampire.nw`, and `-zorbi.nw` match complete official level bytecode. Only missing clientside markers and CRLF normalization are needed; original files remain unchanged. No additional compiler changes or historical expectation replacements were required. All 868 compiler tests pass with both NuGet and local GSAst dependencies. Source snapshots, per-block fixtures, complete MCP responses, sequential checkpoints, hashes, and resume state are under `tests/gs1-levels/`; see `world-progress.json`. Next: `0infer00sil.nw`, source block 1, not yet processed.
+
+Initial level checkpoint: `splashscreen.nw` parity is reconciled for all eight NPCs using four original script bodies, one existing clientside section, and three documented compatible variants. The complete compatible-level MCP capture matches every byte locally, including event flags. Fixed GS1 `setshootparams` comma tails to remain one interpolated string and preserved interior whitespace/concatenation order in shared `triggeraction` parameter lowering. Two fresh official probes cover the fix. All 855 compiler tests passed with both NuGet and local GSAst dependencies at this checkpoint; no historical expectations changed. Originals, compiler rejections, compatible inputs, complete MCP responses, hashes, and failure audits are under `tests/gs1-levels/`. See its README and `splashscreen-reconciliation.json`.
+
 Priority: resolve any new or changed test failure before advancing the corpus.
 The historical GS2 failures are reconciled, and sequential GS1 testing has resumed.
 Use fresh official output to distinguish compiler bugs from stale expectations;
