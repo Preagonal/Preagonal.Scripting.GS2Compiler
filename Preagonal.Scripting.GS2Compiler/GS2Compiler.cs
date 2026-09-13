@@ -1517,6 +1517,7 @@ internal static class GS2Compiler
 					for (var i = 0; i < array.Dimensions.Count; ++i)
 					{
 						Emit(array.Dimensions[i]);
+						if (!IsNumberExpr(array.Dimensions[i])) _bytecode.Emit(Op.ConvToFloat);
 						_bytecode.Emit(i == 0 ? Op.ArrayNew : Op.ArrayNewMultiDim);
 					}
 					break;
