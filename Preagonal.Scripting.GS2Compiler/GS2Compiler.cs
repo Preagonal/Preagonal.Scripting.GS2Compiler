@@ -1229,7 +1229,11 @@ internal static class GS2Compiler
 					break;
 				case CastExpr { Type: "float", Expression: var castValue }:
 					Emit(castValue);
-					if (!IsNumberExpr(castValue)) _bytecode.Emit(Op.ConvToFloat);
+					// Official toolchain parity: an explicit float() of an int()-typed
+					// expression keeps a ConvToFloat after OP_INT (e.g. float(int(x))).
+					// int() is typed Number so the generic IsNumberExpr check skips it;
+					// the official compiler evidently does not treat int() as numeric.
+					if (!IsNumberExpr(castValue) || castValue is CastExpr { Type: "int" }) _bytecode.Emit(Op.ConvToFloat);
 					break;
 				case CastExpr { Type: "_", Expression: var castValue }:
 					Emit(castValue);

@@ -322,6 +322,45 @@ public class InterfaceTests
 	}
 
 	[Fact]
+	public void Given_float_of_int_cast_When_compiling_Then_conv_to_float_follows_int_opcode()
+	{
+		const string scriptText =
+			"""
+						function onCreated() {
+						  temp.f = float(int(temp.x));
+						}
+			""";
+
+		var result = Interface.CompileCode(scriptText, withHeader: false);
+		var code = ReadBytecodeSegment(result.ByteCode);
+
+		Assert.True(result.Success);
+		// Official toolchain parity: float(int(x)) keeps OP_CONV_TO_FLOAT (33)
+		// immediately after OP_INT (85). The C# compiler used to drop it because
+		// int() is typed Number.
+		Assert.True(Contains([85, 33], code));
+	}
+
+	[Fact]
+	public void Given_float_of_non_int_expr_When_compiling_Then_only_argument_conv_is_emitted()
+	{
+		const string scriptText =
+			"""
+						function onCreated() {
+						  temp.f = float(temp.x);
+						}
+			""";
+
+		var result = Interface.CompileCode(scriptText, withHeader: false);
+		var code = ReadBytecodeSegment(result.ByteCode);
+
+		Assert.True(result.Success);
+		// temp.x member access (35) converted once (33); no OP_INT involved.
+		Assert.True(Contains([35, 33], code));
+		Assert.False(Contains([85, 33], code));
+	}
+
+	[Fact]
 	public void Given_duplicate_function_names_When_compiling_Then_second_prejump_stays_unpatched()
 	{
 		const string scriptText =
