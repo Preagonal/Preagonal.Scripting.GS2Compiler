@@ -20,15 +20,30 @@
         <TargetFramework>net10.0</TargetFramework>
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
         <IsAotCompatible>true</IsAotCompatible>
-        <UseLocalGSAst Condition="'$(Configuration)' == 'Debug'">true</UseLocalGSAst>
     </PropertyGroup>
+
+    <PropertyGroup>
+        <!-- Local Common development: set the PreagonalCommonRoot environment variable to your
+             Preagonal.Scripting.Common checkout (e.g. export PreagonalCommonRoot=$HOME/gs2-common-migrate/)
+             to build the compiler against live Common source. When unset, the default sibling
+             checkout path is probed; if neither exists, the pinned NuGet package below is used. -->
+        <PreagonalCommonRoot Condition="'$(PreagonalCommonRoot)' == ''">$(MSBuildThisFileDirectory)..\..\Preagonal.Scripting.Common\</PreagonalCommonRoot>
+    </PropertyGroup>
+    <Choose>
+        <When Condition="Exists('$(PreagonalCommonRoot)src/Preagonal.Scripting.Common/Preagonal.Scripting.Common.csproj')">
+            <ItemGroup>
+                <ProjectReference Include="$(PreagonalCommonRoot)src/Preagonal.Scripting.Common/Preagonal.Scripting.Common.csproj" />
+            </ItemGroup>
+        </When>
+        <Otherwise>
+            <ItemGroup>
+                <PackageReference Include="Preagonal.Scripting.Common" Version="1.4.92" />
+            </ItemGroup>
+        </Otherwise>
+    </Choose>
 
     <ItemGroup>
         <PackageReference Include="Antlr4.Runtime.Standard" Version="4.13.1"/>
-        <PackageReference Include="Preagonal.Scripting.GSAst" Version="0.0.5" Condition="'$(UseLocalGSAst)' != 'true'"/>
-        <PackageReference Include="Preagonal.Scripting.GSAst.Grammar" Version="0.0.5" Condition="'$(UseLocalGSAst)' != 'true'"/>
-        <ProjectReference Include="..\..\preagonal.scripting.gsast\Preagonal.Scripting.GSAst\Preagonal.Scripting.GSAst.csproj" Condition="'$(UseLocalGSAst)' == 'true'"/>
-        <ProjectReference Include="..\..\preagonal.scripting.gsast\Preagonal.Scripting.GSAst.Grammar\Preagonal.Scripting.GSAst.Grammar.csproj" Condition="'$(UseLocalGSAst)' == 'true'"/>
     </ItemGroup>
 
     <ItemGroup>

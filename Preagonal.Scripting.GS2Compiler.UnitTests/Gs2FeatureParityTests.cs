@@ -143,7 +143,7 @@ public class Gs2FeatureParityTests
 	}
 
 	[Fact]
-	public void Given_unicode_string_fixture_When_compiling_Then_unicode_is_preserved()
+	public void Given_unicode_string_fixture_When_compiling_Then_unicode_matches_official_substitution()
 	{
 		var          path           = Path.Combine(BaselineTests.FindRepoRoot(), "tests", "scripts", "edge_cases", "02_long_strings.gs2");
 		var          source         = File.ReadAllText(path);
@@ -156,7 +156,8 @@ public class Gs2FeatureParityTests
 
 		Assert.True(result.Success, result.ErrMsg);
 		var strings = Encoding.UTF8.GetString(ReadSegments(result.ByteCode)[3]).Split('\0');
-		Assert.Contains(unicode, strings);
+		// Official language mode: non-Latin-1 characters become ?, matching the official toolchain.
+		Assert.Contains("Unicode: ????? ????? ?? ??? ???", strings);
 	}
 
 	[Fact]
