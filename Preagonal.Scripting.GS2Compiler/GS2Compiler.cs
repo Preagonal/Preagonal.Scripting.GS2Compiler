@@ -24,7 +24,7 @@ internal static class GS2Compiler
 		if (parseResult.ErrorMessage != null || parseResult.Program == null) return new() { Success = false, ErrMsg = parseResult.ErrorMessage ?? "malformed input\n", ByteCode = [] };
 		var program  = parseResult.Program;
 		var bytecode = new BytecodeWriter(program.Gs1EventFlags, grammar);
-		var emitter  = new Emitter(bytecode, program.Constants, grammar);
+		var emitter  = new Emitter(bytecode, program.Constants, parseResult.BareDeclarations, grammar);
 		foreach (var item in program.Items)
 		{
 			if (item is FunctionItem function) emitter.EmitFunction(function.Function);
@@ -33,6 +33,18 @@ internal static class GS2Compiler
 				bytecode.PatchPrejumps();
 				emitter.EmitStatement(statement.Statement);
 			}
+		}
+
+		// Official: a bare function declaration (`function foo()` with no body) defers its
+		// `return 0` to a single shared epilogue at end-of-code. The last pending function
+		// prejump targets the epilogue; earlier ones target end-of-code (past it).
+		if (parseResult.BareDeclarations.Count > 0)
+		{
+			var epiloguePos = bytecode.OpIndex;
+			bytecode.Emit(Opcode.TypeNumber);
+			bytecode.EmitDynamicNumber(0);
+			bytecode.Emit(Opcode.Ret);
+			bytecode.PatchPrejumpsLastTo(epiloguePos);
 		}
 
 		var result = bytecode.ToArray();
@@ -75,7 +87,7 @@ internal static class GS2Compiler
 		return hash;
 	}
 
-	private sealed record ParseResult(ProgramNode? Program, string? ErrorMessage);
+	private sealed record ParseResult(ProgramNode? Program, string? ErrorMessage, HashSet<FunctionNode> BareDeclarations);
 
 	private sealed class ParseFailure(int line) : Exception
 	{
@@ -151,11 +163,14 @@ internal static class GS2Compiler
 				lexer.AddErrorListener(listener);
 				parser.AddErrorListener(listener);
 				var script = parser.script();
-				return parser.NumberOfSyntaxErrors == 0 ? new(new Builder().Build(script), null) : new(null, ErrorMessage(code, 1));
+				if (parser.NumberOfSyntaxErrors != 0) return new(null, ErrorMessage(code, 1), new());
+				var builder = new Builder();
+				var program = builder.Build(script);
+				return new(program, null, builder.BareDeclarations);
 			}
 			catch (ParseFailure ex)
 			{
-				return new(null, ErrorMessage(code, ex.Line));
+				return new(null, ErrorMessage(code, ex.Line), new());
 			}
 		}
 
@@ -163,8 +178,12 @@ internal static class GS2Compiler
 		{
 			private readonly Dictionary<string, Expr>                    _constants = new(StringComparer.Ordinal);
 			private readonly Dictionary<string, Dictionary<string, int>> _enums     = new(StringComparer.Ordinal);
+			private readonly HashSet<FunctionNode>                       _bareDeclarations = new();
 			private          bool                                        _comparisonContext;
 			private          int                                         _lambdaId = 1;
+
+			/// <summary>Functions declared bare (`function foo()` with no body and no semicolon).</summary>
+			public HashSet<FunctionNode> BareDeclarations => _bareDeclarations;
 
 			public ProgramNode Build(GS2Parser.ScriptContext context)
 			{
@@ -213,7 +232,12 @@ internal static class GS2Compiler
 			private FunctionNode BuildFunction(GS2Parser.FunctionDeclarationContext context)
 			{
 				var (name, objectName) = BuildFunctionName(context.functionName().GetText());
-				return new(name, objectName, context.PUBLIC() != null, BuildArguments(context.parameterList()?.argumentList()), BuildFunctionBody(context.statement()));
+				var node = new FunctionNode(name, objectName, context.PUBLIC() != null, BuildArguments(context.parameterList()?.argumentList()), BuildFunctionBody(context.statement()));
+				// Official: `function foo()` with no body and no semicolon is a bare declaration.
+				// It gets a minimal stub with no synthesized `return 0`; the return is deferred
+				// to the shared end-of-code epilogue.
+				if (context.statement() == null) _bareDeclarations.Add(node);
+				return node;
 			}
 
 			private static (string Name, string? ObjectName) BuildFunctionName(string text)
@@ -626,11 +650,11 @@ internal static class GS2Compiler
 				lexer.AddErrorListener(listener);
 				parser.AddErrorListener(listener);
 				var program = parser.program();
-				return parser.NumberOfSyntaxErrors == 0 ? new(new Builder(code).Build(program), null) : new(null, ErrorMessage(code, 1));
+				return parser.NumberOfSyntaxErrors == 0 ? new(new Builder(code).Build(program), null, new()) : new(null, ErrorMessage(code, 1), new());
 			}
 			catch (ParseFailure ex)
 			{
-				return new(null, ErrorMessage(code, ex.Line));
+				return new(null, ErrorMessage(code, ex.Line), new());
 			}
 		}
 
@@ -1509,7 +1533,7 @@ internal static class GS2Compiler
 			};
 	}
 
-	private sealed class Emitter(BytecodeWriter bytecode, Dictionary<string, Expr> constants, ScriptGrammar grammar)
+	private sealed class Emitter(BytecodeWriter bytecode, Dictionary<string, Expr> constants, HashSet<FunctionNode> bareDeclarations, ScriptGrammar grammar)
 	{
 		private readonly Stack<List<int>>                                                 _breakPatches            = new();
 		private readonly Stack<List<int>>                                                 _continuePatches         = new();
@@ -1616,7 +1640,10 @@ internal static class GS2Compiler
 			if (unresolvedGotoPatches.Count > 0) throw new InvalidOperationException($"goto to undefined label(s) in function '{functionName}': {string.Join(", ", unresolvedGotoPatches.Keys)}");
 			_tempAliases.Pop();
 			var lastStatement = LastMeaningfulStatement(node.Body);
-			if (grammar == ScriptGrammar.GS2 ? lastStatement is not ReturnStmt : node.Name != "getPreviewSpriteCount" && (lastStatement == null || !DefinitelyReturns(lastStatement)))
+			// Official: a bare declaration (`function foo()` with no body) gets a minimal stub;
+			// its `return 0` is deferred to the shared end-of-code epilogue (see Compile).
+			var isBareDeclaration = bareDeclarations.Contains(node);
+			if (!isBareDeclaration && (grammar == ScriptGrammar.GS2 ? lastStatement is not ReturnStmt : node.Name != "getPreviewSpriteCount" && (lastStatement == null || !DefinitelyReturns(lastStatement))))
 			{
 				bytecode.Emit(Opcode.TypeNumber);
 				bytecode.EmitDynamicNumber(0);
@@ -3466,6 +3493,22 @@ internal static class GS2Compiler
 		{
 			foreach (var loc in _prejumpPatches) PatchShort(loc, OpIndex);
 			_prejumpPatches.Clear();
+		}
+
+		/// <summary>
+		/// Official model for the shared end-of-code epilogue: the last pending function
+		/// prejump targets <paramref name="epiloguePos"/> (the epilogue itself); all earlier
+		/// pending prejumps target end-of-code (past the epilogue).
+		/// </summary>
+		public void PatchPrejumpsLastTo(int epiloguePos)
+		{
+			if (_prejumpPatches.Count > 0)
+			{
+				var last = _prejumpPatches[^1];
+				_prejumpPatches.RemoveAt(_prejumpPatches.Count - 1);
+				PatchShort(last, epiloguePos);
+			}
+			PatchPrejumps();
 		}
 
 		public void Emit(Opcode op)

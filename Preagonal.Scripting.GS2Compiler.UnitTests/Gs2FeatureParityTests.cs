@@ -215,6 +215,49 @@ public class Gs2FeatureParityTests
 		);
 	}
 
+	[Fact]
+	public void Given_bare_function_declaration_When_compiling_Then_emits_minimal_stub_with_shared_epilogue()
+	{
+		// Official: `function foo()` with no body and no semicolon gets a minimal stub
+		// (no synthesized `return 0`); a single shared `0; return;` epilogue terminates
+		// the code segment, targeted by the last function's prejump.
+		const string source = "function bare()\nfunction after() {\n  return 1;\n}\n";
+		var          result = Interface.CompileCode(source, withHeader: false, grammar: ScriptGrammar.GS2);
+
+		Assert.True(result.Success, result.ErrMsg);
+		var code = ReadSegments(result.ByteCode)[4];
+		// The shared epilogue terminates the code segment.
+		Assert.Equal(new byte[] { 20, 0xF3, 0, 7 }, code[^4..]);
+		// The bare function has no inline `return 0`: the only TYPENUM #0, RET in the
+		// code is the epilogue (after() returns 1, so its body holds TYPENUM #1).
+		var returnsZero = 0;
+		for (var i = 0; i + 4 <= code.Length; i++)
+			if (code[i] == 20 && code[i + 1] == 0xF3 && code[i + 2] == 0 && code[i + 3] == 7)
+				returnsZero++;
+		Assert.Equal(1, returnsZero);
+	}
+
+	[Fact]
+	public void Given_semicolon_function_declaration_When_compiling_Then_synthesizes_inline_return()
+	{
+		// `function foo();` (with semicolon) is not a bare declaration: official synthesizes
+		// the `return 0` inline and emits no shared epilogue.
+		const string source = "function empty();\nfunction after() {\n  return 1;\n}\n";
+		var          result = Interface.CompileCode(source, withHeader: false, grammar: ScriptGrammar.GS2);
+
+		Assert.True(result.Success, result.ErrMsg);
+		var code = ReadSegments(result.ByteCode)[4];
+		// empty()'s inline `return 0` appears before after()'s body (not just at the end).
+		var firstZeroReturn = -1;
+		for (var i = 0; i + 4 <= code.Length; i++)
+			if (code[i] == 20 && code[i + 1] == 0xF3 && code[i + 2] == 0 && code[i + 3] == 7)
+			{
+				firstZeroReturn = i;
+				break;
+			}
+		Assert.InRange(firstZeroReturn, 0, code.Length - 4 - 4);
+	}
+
 	[Theory]
 	[InlineData("class")]
 	[InlineData("weapon")]

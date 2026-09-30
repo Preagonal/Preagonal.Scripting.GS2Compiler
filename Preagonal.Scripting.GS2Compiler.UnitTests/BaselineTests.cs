@@ -1293,20 +1293,13 @@ public class BaselineTests
 		return true;
 	}
 
-	[Theory]
-	[InlineData("functions/01_basic_functions.gs2")]
-	[InlineData("advanced/graalx/weapon-Gang Control.gs2")]
-	public void Given_semicolon_compatible_fixture_When_compiling_Then_original_bytecode_is_unchanged(string relative)
-	{
-		var root       = FindRepoRoot();
-		var original   = Interface.CompileCode(File.ReadAllText(Path.Combine(root, "tests", "scripts", relative)), withHeader: false);
-		var path       = Path.ChangeExtension(Path.Combine(root, "tests", "official-baselines", relative), ".official.gs2");
-		var compatible = Interface.CompileCode(File.ReadAllText(path), withHeader: false);
-
-		Assert.True(original.Success, original.ErrMsg);
-		Assert.True(compatible.Success, compatible.ErrMsg);
-		Assert.Equal(original.ByteCode, compatible.ByteCode);
-	}
+	// Removed: Given_semicolon_compatible_fixture_When_compiling_Then_original_bytecode_is_unchanged.
+	// It asserted that adding semicolons (to make sources official-compatible) is bytecode-neutral.
+	// This is false for bare function declarations: the official toolchain distinguishes
+	// `function foo()` (minimal stub + shared end-of-code epilogue) from `function foo();`
+	// (inline `return 0`). Both fixtures using that test (functions/01_basic_functions.gs2,
+	// advanced/graalx/weapon-Gang Control.gs2) contain bare declarations.
+	// See Gs2FeatureParityTests for the official behavior.
 
 	[Theory]
 	[InlineData("01_syntax_errors.gs2")]
