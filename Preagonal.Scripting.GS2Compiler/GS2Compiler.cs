@@ -24,7 +24,7 @@ internal static class GS2Compiler
 		if (parseResult.ErrorMessage != null || parseResult.Program == null) return new() { Success = false, ErrMsg = parseResult.ErrorMessage ?? "malformed input\n", ByteCode = [] };
 		var program  = parseResult.Program;
 		var bytecode = new BytecodeWriter(program.Gs1EventFlags, grammar);
-		var emitter  = new Emitter(bytecode, program.Constants, program.Enums, grammar);
+		var emitter  = new Emitter(bytecode, program.Constants, grammar);
 		foreach (var item in program.Items)
 		{
 			if (item is FunctionItem function) emitter.EmitFunction(function.Function);
@@ -1509,7 +1509,7 @@ internal static class GS2Compiler
 			};
 	}
 
-	private sealed class Emitter(BytecodeWriter bytecode, Dictionary<string, Expr> constants, Dictionary<string, Dictionary<string, int>> enums, ScriptGrammar grammar)
+	private sealed class Emitter(BytecodeWriter bytecode, Dictionary<string, Expr> constants, ScriptGrammar grammar)
 	{
 		private readonly Stack<List<int>>                                                 _breakPatches            = new();
 		private readonly Stack<List<int>>                                                 _continuePatches         = new();
@@ -2449,8 +2449,10 @@ internal static class GS2Compiler
 					bytecode.EmitDynamicStringIndex(bytecode.GetString(id.Name));
 					break;
 				case EnumExpr enumExpr:
-					bytecode.Emit(Opcode.TypeNumber);
-					bytecode.EmitDynamicNumber(enums.TryGetValue(enumExpr.EnumName, out var members) && members.TryGetValue(enumExpr.MemberName, out var value) ? value : 0);
+					// Match the official compiler: Enum::Member is emitted as a runtime
+					// variable reference, never constant-folded to its numeric value.
+					bytecode.Emit(Opcode.TypeVar);
+					bytecode.EmitDynamicStringIndex(bytecode.GetString(enumExpr.EnumName + "::" + enumExpr.MemberName));
 					break;
 				case NumberExpr number:
 					EmitNativeNumber(double.Parse(number.Text, CultureInfo.InvariantCulture));

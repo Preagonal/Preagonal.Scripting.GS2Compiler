@@ -161,6 +161,18 @@ public class Gs2FeatureParityTests
 	}
 
 	[Fact]
+	public void Given_enum_member_reference_When_compiling_Then_emits_type_var_like_official()
+	{
+		const string source = "enum State { IDLE, WALKING };\nfunction test() {\n  temp.currentState = State::IDLE;\n}\n";
+		var          result = Interface.CompileCode(source, withHeader: false, grammar: ScriptGrammar.GS2);
+
+		Assert.True(result.Success, result.ErrMsg);
+		var strings = Encoding.UTF8.GetString(ReadSegments(result.ByteCode)[3]).Split('\0');
+		// Official behavior: Enum::Member is a runtime variable reference, never constant-folded.
+		Assert.Contains("State::IDLE", strings);
+	}
+
+	[Fact]
 	public void Given_movement_class_join_When_comparing_bytecode_Then_only_the_attachment_is_separated()
 	{
 		var          root       = BaselineTests.FindRepoRoot();
