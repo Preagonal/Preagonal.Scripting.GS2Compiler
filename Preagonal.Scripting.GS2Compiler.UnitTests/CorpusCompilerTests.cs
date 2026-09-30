@@ -14,8 +14,24 @@ public class CorpusCompilerTests
     {
         var data = new TheoryData<string>();
         foreach (var name in CorpusFixtures.DiscoverFixtureNames())
-            if (CorpusFixtures.ReadCSharpBytecode(name) is not null)
+        {
+            byte[]? expected;
+            try
+            {
+                expected = CorpusFixtures.ReadCSharpBytecode(name);
+            }
+            catch (InvalidOperationException)
+            {
+                // Fixture has no captured C# baseline at all (e.g. official-only
+                // fixtures such as scr-statements-06_guard_return, which record
+                // official captures but no C# bytecode). Skip it instead of
+                // capturing the current output as a baseline, which could
+                // enshrine a compiler bug.
+                continue;
+            }
+            if (expected is not null)
                 data.Add(name);
+        }
         return data;
     }
 
