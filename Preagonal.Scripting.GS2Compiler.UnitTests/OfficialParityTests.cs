@@ -17,9 +17,7 @@ namespace Preagonal.Scripting.GS2Compiler.UnitTests;
 /// (self-regression). A failure here means the C# compiler diverges from the
 /// official toolchain on real-world source shapes.
 ///
-/// Intended to go red when a fixture exposes a compiler bug (e.g. the
-/// guard-form trailing-return-0 omission documented by
-/// <c>TrailingReturnZeroTests</c> once its fixture merges into the corpus).
+/// Intended to go red when a fixture exposes a compiler bug.
 /// </summary>
 public class OfficialParityTests
 {
