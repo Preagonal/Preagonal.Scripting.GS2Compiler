@@ -30,6 +30,11 @@ internal static class GS2Compiler
 			if (item is FunctionItem function) emitter.EmitFunction(function.Function);
 			else if (item is StatementItem statement)
 			{
+				// Official: a bare top-level join("literal"); is a compile-time class-join
+				// directive and emits no code. Inside functions or under control flow it
+				// remains a runtime call.
+				if (statement.Statement is ExprStmt { Expression: CallExpr { Name: "join", Args: [StringExpr] } })
+					continue;
 				bytecode.PatchPrejumps();
 				emitter.EmitStatement(statement.Statement);
 			}

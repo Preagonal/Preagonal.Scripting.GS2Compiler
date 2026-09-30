@@ -194,25 +194,43 @@ public class Gs2FeatureParityTests
 
 		var original = Interface.CompileCode(source, withHeader: false, grammar: ScriptGrammar.GS2);
 		Assert.True(original.Success, original.ErrMsg);
-		var segments = ReadSegments(original.ByteCode);
-		var strings  = Encoding.UTF8.GetString(segments[3]).Split('\0');
-		Assert.Equal("movement-functions", strings[0]);
-		Assert.Equal("join", strings[1]);
-		Assert.Equal(
-			new byte[]
-			{
-				23,
-				21,
-				0xF0,
-				0,
-				22,
-				0xF0,
-				1,
-				6,
-				32,
-			},
-			segments[4][..9]
-		);
+		// Official: a bare top-level join("literal"); is a compile-time class-join directive
+		// and emits no code, so the source with the attachment compiles to the same bytes.
+		Assert.Equal(expected, original.ByteCode);
+	}
+
+	[Fact]
+	public void Given_bare_top_level_join_When_compiling_Then_emits_no_code()
+	{
+		const string source = "join(\"some-class\");\n";
+		var          result = Interface.CompileCode(source, withHeader: false, grammar: ScriptGrammar.GS2);
+
+		Assert.True(result.Success, result.ErrMsg);
+		Assert.Empty(ReadSegments(result.ByteCode)[4]);
+	}
+
+	[Fact]
+	public void Given_join_inside_function_When_compiling_Then_emits_runtime_call()
+	{
+		const string source = "function onCreated() {\n  join(\"some-class\");\n}\n";
+		var          result = Interface.CompileCode(source, withHeader: false, grammar: ScriptGrammar.GS2);
+
+		Assert.True(result.Success, result.ErrMsg);
+		var strings = Encoding.UTF8.GetString(ReadSegments(result.ByteCode)[3]).Split('\0');
+		Assert.Contains("join", strings);
+		Assert.Contains("some-class", strings);
+	}
+
+	[Fact]
+	public void Given_join_under_top_level_conditional_When_compiling_Then_emits_runtime_call()
+	{
+		const string source = "if (playerenters) join(\"some-class\");\n";
+		var          result = Interface.CompileCode(source, withHeader: false, grammar: ScriptGrammar.GS2);
+
+		Assert.True(result.Success, result.ErrMsg);
+		var strings = Encoding.UTF8.GetString(ReadSegments(result.ByteCode)[3]).Split('\0');
+		Assert.Contains("join", strings);
+		Assert.Contains("some-class", strings);
 	}
 
 	[Fact]
