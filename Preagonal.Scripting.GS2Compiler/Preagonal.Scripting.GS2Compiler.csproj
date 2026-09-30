@@ -37,7 +37,7 @@
         </When>
         <Otherwise>
             <ItemGroup>
-                <PackageReference Include="Preagonal.Scripting.Common" Version="1.4.94" />
+                <PackageReference Include="Preagonal.Scripting.Common" Version="1.4.95" />
             </ItemGroup>
         </Otherwise>
     </Choose>
