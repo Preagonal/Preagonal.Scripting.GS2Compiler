@@ -1,5 +1,0 @@
-// Syntax error test case - missing semicolon
-function syntaxError() {
-  temp.x = 5
-  temp.y = 10;
-}

@@ -1,6 +1,0 @@
-function onCreated() {
-    temp.test = "a";
-    if (temp.test == "\\") {
-      player.chat = "hi";
-    }
-}

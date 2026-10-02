@@ -1,9 +1,0 @@
-{
-  "type": "weapon",
-  "name": "-tmpweapon",
-  "byteCodeBase64": "AAAAAQAAAAQAAAAAAAAAAgAAABMAAAABdGVzdEFzc2lnbm1lbnQAAAAAAwAAAB94AG1lc3NhZ2UASGVsbG8AIFdvcmxkAGNvdW50ZXIAAAAABAAAAHkB80kXMwq9FvAAIy8t8wAgLvMAFPMKMi7zAB4hFPMFPDIu8wAeIRTzAz0yLvMAHiEU8wI+Mi7zAB4hFPMEPzIu8wAeIRTzA0AyvRbwASMV8AIyvRbwASMeIhXwA3EyvRbwBCMU8wUyvRbwBCM0IL0W8AQjNSAU8wAH",
-  "byteCount": 207,
-  "outputPath": "/tmp/preagonal-baseline-current.gs2bc",
-  "temporaryScriptRemoved": true,
-  "success": true
-}

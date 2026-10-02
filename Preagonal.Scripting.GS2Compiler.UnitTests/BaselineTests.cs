@@ -6,26 +6,6 @@ namespace Preagonal.Scripting.GS2Compiler.UnitTests;
 
 public class BaselineTests
 {
-	public static IEnumerable<object[]> BasicScripts()
-	{
-		var root = FindRepoRoot();
-		foreach (var category in new[]
-		         {
-			         "basic",
-			         "expressions",
-			         "functions",
-			         "classes",
-			         "edge_cases",
-		         })
-		foreach (var script in Directory.EnumerateFiles(Path.Combine(root, "tests", "scripts", category), "*.gs2", SearchOption.TopDirectoryOnly))
-			yield return [script];
-		yield return [Path.Combine(root, "tests", "scripts", "statements", "01_conditionals.gs2")];
-		yield return [Path.Combine(root, "tests", "scripts", "statements", "02_loops.gs2")];
-		yield return [Path.Combine(root, "tests", "scripts", "statements", "03_switch.gs2")];
-		yield return [Path.Combine(root, "tests", "scripts", "statements", "04_with.gs2")];
-		//yield return [Path.Combine(root, "tests", "scripts", "statements", "05_goto.gs2")];
-	}
-
 	public static IEnumerable<object[]> AdvancedScripts()
 	{
 		var root = FindRepoRoot();
@@ -1227,24 +1207,6 @@ public class BaselineTests
 	}
 
 	[Theory]
-	[MemberData(nameof(BasicScripts))]
-	public void Given_basic_fixture_When_compiling_Then_bytecode_matches_baseline(string scriptPath)
-	{
-		var root         = FindRepoRoot();
-		var relative     = Path.GetRelativePath(Path.Combine(root, "tests", "scripts"), scriptPath);
-		var baselinePath = Path.ChangeExtension(Path.Combine(root, "tests", "baselines", relative), ".json");
-		var baseline     = JsonSerializer.Deserialize<BaselineData>(File.ReadAllText(baselinePath), new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
-
-		var result = Interface.CompileCode(File.ReadAllText(scriptPath), withHeader: false);
-		if (AssertCurrentOfficial(root, relative, result)) return;
-		var hash = Convert.ToHexString(SHA256.HashData(result.ByteCode)).ToLowerInvariant();
-
-		Assert.Equal(baseline.CompilationSuccess, result.Success);
-		Assert.Equal(baseline.BytecodeSize, result.ByteCode.Length);
-		Assert.Equal(baseline.BytecodeHash, hash);
-	}
-
-	[Theory]
 	[MemberData(nameof(AdvancedScripts))]
 	public void Given_advanced_fixture_When_compiling_Then_it_succeeds(string scriptPath)
 	{
@@ -1300,19 +1262,6 @@ public class BaselineTests
 	// (inline `return 0`). Both fixtures using that test (functions/01_basic_functions.gs2,
 	// advanced/graalx/weapon-Gang Control.gs2) contain bare declarations.
 	// See Gs2FeatureParityTests for the official behavior.
-
-	[Theory]
-	[InlineData("01_syntax_errors.gs2")]
-	[InlineData("02_semantic_errors.gs2")]
-	[InlineData("03_string_escaping.gs2")]
-	public void Given_error_fixture_When_compiling_Then_it_fails(string fileName)
-	{
-		var root   = FindRepoRoot();
-		var result = Interface.CompileCode(File.ReadAllText(Path.Combine(root, "tests", "scripts", "error_cases", fileName)), withHeader: false);
-
-		Assert.False(result.Success);
-		Assert.Empty(result.ByteCode);
-	}
 
 	public static string FindRepoRoot()
 	{

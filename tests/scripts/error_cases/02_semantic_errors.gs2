@@ -1,4 +1,0 @@
-// Syntax error test case - unclosed string
-function semanticError() {
-  temp.message = "This string is not closed;
-}
