@@ -30,16 +30,13 @@ typedef struct CompilerResponse {
     uint32_t JoinedClassesCount;
 } CompilerResponse;
 
-DLL_EXPORT void *get_context();
+DLL_EXPORT CompilerResponse compile_code_no_header(const char *code);
 
-DLL_EXPORT CompilerResponse compile_code_no_header(void *context, const char *code);
-
-DLL_EXPORT CompilerResponse compile_code(void *context, const char *code, const char *type, const char *name);
+DLL_EXPORT CompilerResponse compile_code(const char *code, const char *type, const char *name);
 
 // Releases all response allocations and clears the response. Strings are UTF-8.
 DLL_EXPORT void free_response(CompilerResponse *response);
 
-DLL_EXPORT void delete_context(void *context);
 #ifdef __cplusplus
 }
 #endif

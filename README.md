@@ -30,9 +30,9 @@ if (response.success)
 }
 ```
 
-These inline bindings call the C# native exports and copy the results into the reference C++ response types. Responses own their buffers and remain valid across further compilations and context destruction. The C++ binding exposes the headerless compilation path used by gserver.
+These inline bindings call the C# native exports and copy the results into the reference C++ response types. Responses own their buffers and remain valid across further compilations. `GS2Context` preserves gserver’s call syntax and owns no native state. The C++ binding exposes the headerless compilation path used by gserver.
 
-For direct C ABI calls, `<GS2Compiler.h>` declares the exports (inside `gs2compiler_native` for C++). `JoinedClasses` is an array of UTF-8 string pointers with `JoinedClassesCount` entries. Release every returned response with `free_response(&response)`; this frees the error text, bytecode, and class strings and clears the response. Release contexts with `delete_context`.
+For direct C ABI calls, `<GS2Compiler.h>` declares the exports (inside `gs2compiler_native` for C++). `JoinedClasses` is an array of UTF-8 string pointers with `JoinedClassesCount` entries. Release every returned response with `free_response(&response)`; this frees the error text, bytecode, and class strings and clears the response. Compilation is stateless: `compile_code_no_header(code)` and `compile_code(code, type, name)` take no context argument.
 
 The native integration regression can be built against a published library:
 

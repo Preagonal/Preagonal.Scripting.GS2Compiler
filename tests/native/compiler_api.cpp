@@ -14,9 +14,16 @@ int main()
     auto next = context.compile("echo(\"next\");");
     assert(next.success && next.joinedClasses.empty());
     assert(result.joinedClasses.size() == 3 && result.bytecode.length());
+    auto header = gs2compiler_native::compile_code("join(\"header\");", "weapon", "test");
+    assert(header.Success && header.ByteCodeSize && header.JoinedClassesCount == 1);
+    assert(std::strcmp(header.JoinedClasses[0], "header") == 0);
+    gs2compiler_native::free_response(&header);
+    auto error = gs2compiler_native::compile_code_no_header("function {");
+    assert(!error.Success && error.ErrMsg && !error.ByteCode && !error.JoinedClassesCount);
+    gs2compiler_native::free_response(&error);
     for (int i = 0; i < 100; ++i)
     {
-        auto raw = gs2compiler_native::compile_code_no_header(nullptr, "join(\"native\");");
+        auto raw = gs2compiler_native::compile_code_no_header("join(\"native\");");
         assert(raw.Success && raw.JoinedClassesCount == 1);
         assert(std::strcmp(raw.JoinedClasses[0], "native") == 0);
         gs2compiler_native::free_response(&raw);
