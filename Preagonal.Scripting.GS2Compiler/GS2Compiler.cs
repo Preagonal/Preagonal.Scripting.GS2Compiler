@@ -6,7 +6,7 @@ using System.Linq;
 using System.Text;
 using Antlr4.Runtime;
 using Antlr4.Runtime.Tree;
-using Preagonal.Scripting.GS2Compiler.Enums;
+using Preagonal.Scripting.Common;
 using Preagonal.Scripting.GSAst;
 
 namespace Preagonal.Scripting.GS2Compiler;
@@ -24,15 +24,32 @@ internal static class GS2Compiler
 		if (parseResult.ErrorMessage != null || parseResult.Program == null) return new() { Success = false, ErrMsg = parseResult.ErrorMessage ?? "malformed input\n", ByteCode = [] };
 		var program  = parseResult.Program;
 		var bytecode = new BytecodeWriter(program.Gs1EventFlags, grammar);
-		var emitter  = new Emitter(bytecode, program.Constants, program.Enums, grammar);
+		var emitter  = new Emitter(bytecode, program.Constants, parseResult.BareDeclarations, grammar);
 		foreach (var item in program.Items)
 		{
 			if (item is FunctionItem function) emitter.EmitFunction(function.Function);
 			else if (item is StatementItem statement)
 			{
+				// Official: a bare top-level join("literal"); is a compile-time class-join
+				// directive and emits no code. Inside functions or under control flow it
+				// remains a runtime call.
+				if (statement.Statement is ExprStmt { Expression: CallExpr { Name: "join", Args: [StringExpr] } })
+					continue;
 				bytecode.PatchPrejumps();
 				emitter.EmitStatement(statement.Statement);
 			}
+		}
+
+		// Official: a bare function declaration (`function foo()` with no body) defers its
+		// `return 0` to a single shared epilogue at end-of-code. The last pending function
+		// prejump targets the epilogue; earlier ones target end-of-code (past it).
+		if (parseResult.BareDeclarations.Count > 0)
+		{
+			var epiloguePos = bytecode.OpIndex;
+			bytecode.Emit(Opcode.TypeNumber);
+			bytecode.EmitDynamicNumber(0);
+			bytecode.Emit(Opcode.Ret);
+			bytecode.PatchPrejumpsLastTo(epiloguePos);
 		}
 
 		var result = bytecode.ToArray();
@@ -75,7 +92,7 @@ internal static class GS2Compiler
 		return hash;
 	}
 
-	private sealed record ParseResult(ProgramNode? Program, string? ErrorMessage);
+	private sealed record ParseResult(ProgramNode? Program, string? ErrorMessage, HashSet<FunctionNode> BareDeclarations);
 
 	private sealed class ParseFailure(int line) : Exception
 	{
@@ -151,11 +168,14 @@ internal static class GS2Compiler
 				lexer.AddErrorListener(listener);
 				parser.AddErrorListener(listener);
 				var script = parser.script();
-				return parser.NumberOfSyntaxErrors == 0 ? new(new Builder().Build(script), null) : new(null, ErrorMessage(code, 1));
+				if (parser.NumberOfSyntaxErrors != 0) return new(null, ErrorMessage(code, 1), new());
+				var builder = new Builder();
+				var program = builder.Build(script);
+				return new(program, null, builder.BareDeclarations);
 			}
 			catch (ParseFailure ex)
 			{
-				return new(null, ErrorMessage(code, ex.Line));
+				return new(null, ErrorMessage(code, ex.Line), new());
 			}
 		}
 
@@ -163,8 +183,12 @@ internal static class GS2Compiler
 		{
 			private readonly Dictionary<string, Expr>                    _constants = new(StringComparer.Ordinal);
 			private readonly Dictionary<string, Dictionary<string, int>> _enums     = new(StringComparer.Ordinal);
+			private readonly HashSet<FunctionNode>                       _bareDeclarations = new();
 			private          bool                                        _comparisonContext;
 			private          int                                         _lambdaId = 1;
+
+			/// <summary>Functions declared bare (`function foo()` with no body and no semicolon).</summary>
+			public HashSet<FunctionNode> BareDeclarations => _bareDeclarations;
 
 			public ProgramNode Build(GS2Parser.ScriptContext context)
 			{
@@ -213,7 +237,12 @@ internal static class GS2Compiler
 			private FunctionNode BuildFunction(GS2Parser.FunctionDeclarationContext context)
 			{
 				var (name, objectName) = BuildFunctionName(context.functionName().GetText());
-				return new(name, objectName, context.PUBLIC() != null, BuildArguments(context.parameterList()?.argumentList()), BuildFunctionBody(context.statement()));
+				var node = new FunctionNode(name, objectName, context.PUBLIC() != null, BuildArguments(context.parameterList()?.argumentList()), BuildFunctionBody(context.statement()));
+				// Official: `function foo()` with no body and no semicolon is a bare declaration.
+				// It gets a minimal stub with no synthesized `return 0`; the return is deferred
+				// to the shared end-of-code epilogue.
+				if (context.statement() == null) _bareDeclarations.Add(node);
+				return node;
 			}
 
 			private static (string Name, string? ObjectName) BuildFunctionName(string text)
@@ -626,11 +655,11 @@ internal static class GS2Compiler
 				lexer.AddErrorListener(listener);
 				parser.AddErrorListener(listener);
 				var program = parser.program();
-				return parser.NumberOfSyntaxErrors == 0 ? new(new Builder(code).Build(program), null) : new(null, ErrorMessage(code, 1));
+				return parser.NumberOfSyntaxErrors == 0 ? new(new Builder(code).Build(program), null, new()) : new(null, ErrorMessage(code, 1), new());
 			}
 			catch (ParseFailure ex)
 			{
-				return new(null, ErrorMessage(code, ex.Line));
+				return new(null, ErrorMessage(code, ex.Line), new());
 			}
 		}
 
@@ -1509,7 +1538,7 @@ internal static class GS2Compiler
 			};
 	}
 
-	private sealed class Emitter(BytecodeWriter bytecode, Dictionary<string, Expr> constants, Dictionary<string, Dictionary<string, int>> enums, ScriptGrammar grammar)
+	private sealed class Emitter(BytecodeWriter bytecode, Dictionary<string, Expr> constants, HashSet<FunctionNode> bareDeclarations, ScriptGrammar grammar)
 	{
 		private readonly Stack<List<int>>                                                 _breakPatches            = new();
 		private readonly Stack<List<int>>                                                 _continuePatches         = new();
@@ -1533,7 +1562,7 @@ internal static class GS2Compiler
 
 		public void EmitFunction(FunctionNode node, bool isLambda = false)
 		{
-			bytecode.Emit(Op.SetIndex);
+			bytecode.Emit(Opcode.Jmp);
 			var jmpLoc                                               = bytecode.EmitNumberOperandPlaceholder();
 			var functionName                                         = node.Public && (grammar == ScriptGrammar.GS1 || node.ObjectName != "universe") ? "public." : "";
 			if (!string.IsNullOrEmpty(node.ObjectName)) functionName += node.ObjectName + ".";
@@ -1546,11 +1575,11 @@ internal static class GS2Compiler
 			_labelAddresses.Push(new Dictionary<string, int>(StringComparer.Ordinal));
 			_pendingGotoPatches.Push(new Dictionary<string, List<int>>(StringComparer.Ordinal));
 			_labeledLoops.Push(new(StringComparer.Ordinal));
-			bytecode.Emit(Op.TypeArray);
+			bytecode.Emit(Opcode.TypeArray);
 			for (var i = node.Args.Count - 1; i >= 0; --i) Emit(node.Args[i]);
-			bytecode.Emit(Op.FuncParamsEnd);
-			bytecode.Emit(Op.Jmp);
-			if (node.Body.Exists(ContainsCall)) bytecode.Emit(Op.CmdCall);
+			bytecode.Emit(Opcode.FuncParamsEnd);
+			bytecode.Emit(Opcode.FunctionStart);
+			if (node.Body.Exists(ContainsCall)) bytecode.Emit(Opcode.CmdCall);
 			Dictionary<string, Expr>             cacheBindings        = new(StringComparer.Ordinal);
 			Dictionary<string, Expr>             initialCacheBindings = new(StringComparer.Ordinal);
 			List<(Expr Expression, bool InLoop)> references           = [];
@@ -1589,19 +1618,19 @@ internal static class GS2Compiler
 					.ToDictionary(pair => pair.Key, pair => pair.Index);
 			foreach (var (reference, index) in cachedVariables)
 			{
-				if (reference is IdentifierExpr { Name: "params" }) bytecode.Emit(Op.Params);
+				if (reference is IdentifierExpr { Name: "params" }) bytecode.Emit(Opcode.Params);
 				else
 				{
 					if (reference is MemberExpr member) EmitMemberOwner(member.Object);
-					bytecode.Emit(Op.TypeVar);
+					bytecode.Emit(Opcode.TypeVar);
 					bytecode.EmitDynamicStringIndex(bytecode.GetString(reference is IdentifierExpr identifier ? identifier.Name : ((MemberExpr)reference).Name));
-					if (reference is MemberExpr) bytecode.Emit(Op.MemberAccess);
+					if (reference is MemberExpr) bytecode.Emit(Opcode.MemberAccess);
 				}
 
-				bytecode.Emit(Op.ResolveVar);
-				bytecode.Emit(Op.StoreRegister);
+				bytecode.Emit(Opcode.ResolveVar);
+				bytecode.Emit(Opcode.StoreRegister);
 				bytecode.EmitNumberOperand(index);
-				bytecode.Emit(Op.IndexDec);
+				bytecode.Emit(Opcode.IndexDec);
 			}
 
 			foreach (var (name, binding) in initialCacheBindings)
@@ -1616,11 +1645,14 @@ internal static class GS2Compiler
 			if (unresolvedGotoPatches.Count > 0) throw new InvalidOperationException($"goto to undefined label(s) in function '{functionName}': {string.Join(", ", unresolvedGotoPatches.Keys)}");
 			_tempAliases.Pop();
 			var lastStatement = LastMeaningfulStatement(node.Body);
-			if (grammar == ScriptGrammar.GS2 ? lastStatement is not ReturnStmt : node.Name != "getPreviewSpriteCount" && (lastStatement == null || !DefinitelyReturns(lastStatement)))
+			// Official: a bare declaration (`function foo()` with no body) gets a minimal stub;
+			// its `return 0` is deferred to the shared end-of-code epilogue (see Compile).
+			var isBareDeclaration = bareDeclarations.Contains(node);
+			if (!isBareDeclaration && (grammar == ScriptGrammar.GS2 ? lastStatement is not ReturnStmt : node.Name != "getPreviewSpriteCount" && (lastStatement == null || !DefinitelyReturns(lastStatement))))
 			{
-				bytecode.Emit(Op.TypeNumber);
+				bytecode.Emit(Opcode.TypeNumber);
 				bytecode.EmitDynamicNumber(0);
-				bytecode.Emit(Op.Ret);
+				bytecode.Emit(Opcode.Ret);
 			}
 
 			if (!isLambda)
@@ -1774,12 +1806,12 @@ internal static class GS2Compiler
 				else if (exprStatement.Expression is MethodCallExpr methodCall && NonReturningMethodCalls.Contains(methodCall.Name))
 				{
 				}
-				else if (exprStatement.Expression is CallExpr or MethodCallExpr or DynamicMethodCallExpr) bytecode.Emit(Op.IndexDec);
+				else if (exprStatement.Expression is CallExpr or MethodCallExpr or DynamicMethodCallExpr) bytecode.Emit(Opcode.IndexDec);
 			}
 			else if (statement is ReturnStmt returnStatement)
 			{
 				Emit(returnStatement.Expression);
-				bytecode.Emit(Op.Ret);
+				bytecode.Emit(Opcode.Ret);
 			}
 			else if (statement is IfStmt ifStatement) EmitIf(ifStatement);
 			else if (statement is ForStmt forStatement) EmitFor(forStatement);
@@ -1804,7 +1836,7 @@ internal static class GS2Compiler
 			if (statement.ThenBody.Count == 0 && statement.ElseBody.Count == 0)
 			{
 				Emit(statement.Condition, false, false, 0);
-				bytecode.Emit(Op.IndexDec);
+				bytecode.Emit(Opcode.IndexDec);
 				return;
 			}
 
@@ -1816,9 +1848,9 @@ internal static class GS2Compiler
 			else Emit(statement.Condition, false, false, 0, true);
 			_conditionSuccessPatches.Pop();
 			_conditionFailPatches.Pop();
-			if (!IsBooleanExpr(statement.Condition) && (NeedsNumericConversion(statement.Condition) || grammar == ScriptGrammar.GS1 && statement.Condition is TernaryExpr)) bytecode.Emit(Op.ConvToFloat);
+			if (!IsBooleanExpr(statement.Condition) && (NeedsNumericConversion(statement.Condition) || grammar == ScriptGrammar.GS1 && statement.Condition is TernaryExpr)) bytecode.Emit(Opcode.ConvToFloat);
 			foreach (var patch in conditionSuccessPatches) bytecode.PatchShort(patch, bytecode.OpIndex);
-			bytecode.Emit(Op.If);
+			bytecode.Emit(Opcode.If);
 			var failLoc = bytecode.EmitNumberOperandPlaceholder();
 			foreach (var stmt in statement.ThenBody) EmitStatement(stmt);
 			var hasElse    = statement.HasElse && (grammar == ScriptGrammar.GS2 || statement.ElseBody.Count > 0);
@@ -1827,7 +1859,7 @@ internal static class GS2Compiler
 			foreach (var patch in conditionFailPatches) bytecode.PatchShort(patch, failTarget);
 			if (hasElse)
 			{
-				bytecode.Emit(Op.SetIndex);
+				bytecode.Emit(Opcode.Jmp);
 				var exitLoc = bytecode.EmitNumberOperandPlaceholder();
 				foreach (var stmt in statement.ElseBody) EmitStatement(stmt);
 				bytecode.PatchShort(exitLoc, bytecode.OpIndex);
@@ -1847,23 +1879,23 @@ internal static class GS2Compiler
 			else Emit(statement.Condition, statement.Condition is BinaryExpr { Op: "=" }, false, 0, true);
 			_conditionSuccessPatches.Pop();
 			_conditionFailPatches.Pop();
-			if (!IsBooleanExpr(statement.Condition) && (NeedsNumericConversion(statement.Condition) || grammar == ScriptGrammar.GS2 && statement.Condition is BinaryExpr { Op: "=" })) bytecode.Emit(Op.ConvToFloat);
+			if (!IsBooleanExpr(statement.Condition) && (NeedsNumericConversion(statement.Condition) || grammar == ScriptGrammar.GS2 && statement.Condition is BinaryExpr { Op: "=" })) bytecode.Emit(Opcode.ConvToFloat);
 			foreach (var patch in conditionSuccessPatches) bytecode.PatchShort(patch, bytecode.OpIndex);
-			bytecode.Emit(Op.If);
+			bytecode.Emit(Opcode.If);
 			var       breakLoc     = bytecode.EmitNumberOperandPlaceholder();
 			List<int> breakPatches = [];
 			_breakPatches.Push(breakPatches);
 			List<int> continuePatches = [];
 			_continuePatches.Push(continuePatches);
 			if (statement.Label != null) _labeledLoops.Peek().Add(statement.Label, (breakPatches, []));
-			bytecode.Emit(Op.CmdCall);
+			bytecode.Emit(Opcode.CmdCall);
 			foreach (var stmt in statement.Body) EmitStatement(stmt);
 			foreach (var patch in continuePatches) bytecode.PatchShort(patch, bytecode.OpIndex);
 			if (statement.Label != null)
 				foreach (var patch in _labeledLoops.Peek()[statement.Label].Continue)
 					bytecode.PatchShort(patch, statement.Post == null ? start : bytecode.OpIndex);
 			if (statement.Post != null) EmitUnusedExpression(statement.Post);
-			bytecode.Emit(Op.SetIndex);
+			bytecode.Emit(Opcode.Jmp);
 			bytecode.EmitDynamicNumber(start);
 			_continuePatches.Pop();
 			_breakPatches.Pop();
@@ -1879,33 +1911,33 @@ internal static class GS2Compiler
 			if (grammar == ScriptGrammar.GS2 && statement.Name is MemberExpr { Object: IdentifierExpr { Name: "temp" } } loopName && _cachedVariables.TryPeek(out var cache) && cache.TryGetValue(loopName, out var register))
 				cache[new IdentifierExpr(loopName.Name)] = register;
 			Emit(statement.Source);
-			bytecode.Emit(Op.ConvToObject);
-			bytecode.Emit(Op.TypeNumber);
+			bytecode.Emit(Opcode.ConvToObject);
+			bytecode.Emit(Opcode.TypeNumber);
 			bytecode.EmitDynamicNumber(0);
 			var start = bytecode.OpIndex;
-			bytecode.Emit(Op.Foreach);
+			bytecode.Emit(Opcode.Foreach);
 			var       breakLoc     = bytecode.EmitNumberOperandPlaceholder();
 			List<int> breakPatches = [];
 			_breakPatches.Push(breakPatches);
 			List<int> continuePatches = [];
 			_continuePatches.Push(continuePatches);
 			if (statement.Label != null) _labeledLoops.Peek().Add(statement.Label, (breakPatches, continuePatches));
-			bytecode.Emit(Op.CmdCall);
+			bytecode.Emit(Opcode.CmdCall);
 			foreach (var stmt in statement.Body) EmitStatement(stmt);
 			foreach (var patch in continuePatches) bytecode.PatchShort(patch, bytecode.OpIndex);
-			bytecode.Emit(Op.Inc);
-			bytecode.Emit(Op.SetIndex);
+			bytecode.Emit(Opcode.Inc);
+			bytecode.Emit(Opcode.Jmp);
 			bytecode.EmitDynamicNumber(start);
 			_continuePatches.Pop();
 			_breakPatches.Pop();
 			if (statement.Label != null) _labeledLoops.Peek().Remove(statement.Label);
 			bytecode.PatchShort(breakLoc, bytecode.OpIndex);
 			foreach (var patch in breakPatches) bytecode.PatchShort(patch, bytecode.OpIndex);
-			bytecode.Emit(Op.IndexDec);
+			bytecode.Emit(Opcode.IndexDec);
 			if (grammar == ScriptGrammar.GS2)
 			{
-				bytecode.Emit(Op.IndexDec);
-				bytecode.Emit(Op.IndexDec);
+				bytecode.Emit(Opcode.IndexDec);
+				bytecode.Emit(Opcode.IndexDec);
 			}
 		}
 
@@ -1919,23 +1951,23 @@ internal static class GS2Compiler
 			Emit(statement.Condition, false, false, 0, true);
 			_conditionSuccessPatches.Pop();
 			_conditionFailPatches.Pop();
-			if (!IsBooleanExpr(statement.Condition) && NeedsNumericConversion(statement.Condition)) bytecode.Emit(Op.ConvToFloat);
+			if (!IsBooleanExpr(statement.Condition) && NeedsNumericConversion(statement.Condition)) bytecode.Emit(Opcode.ConvToFloat);
 			foreach (var patch in conditionSuccessPatches) bytecode.PatchShort(patch, bytecode.OpIndex);
 			List<int> breakPatches = [];
 			_breakPatches.Push(breakPatches);
 			List<int> continuePatches = [];
 			_continuePatches.Push(continuePatches);
 			if (statement.Label != null) _labeledLoops.Peek().Add(statement.Label, (breakPatches, []));
-			bytecode.Emit(Op.If);
+			bytecode.Emit(Opcode.If);
 			var breakLoc = bytecode.EmitNumberOperandPlaceholder();
 			breakPatches.Add(breakLoc);
-			bytecode.Emit(Op.CmdCall);
+			bytecode.Emit(Opcode.CmdCall);
 			foreach (var stmt in statement.Body) EmitStatement(stmt);
 			foreach (var patch in continuePatches) bytecode.PatchShort(patch, bytecode.OpIndex);
 			if (statement.Label != null)
 				foreach (var patch in _labeledLoops.Peek()[statement.Label].Continue)
 					bytecode.PatchShort(patch, start);
-			bytecode.Emit(Op.SetIndex);
+			bytecode.Emit(Opcode.Jmp);
 			bytecode.EmitNumberOperand(start);
 			_continuePatches.Pop();
 			_breakPatches.Pop();
@@ -1962,17 +1994,17 @@ internal static class GS2Compiler
 			}
 
 			Emit(statement.Target);
-			bytecode.Emit(Op.ConvToObject);
-			bytecode.Emit(Op.With);
+			bytecode.Emit(Opcode.ConvToObject);
+			bytecode.Emit(Opcode.With);
 			var exitLoc = bytecode.EmitNumberOperandPlaceholder();
 			foreach (var stmt in statement.Body) EmitStatement(stmt);
-			bytecode.Emit(Op.WithEnd);
+			bytecode.Emit(Opcode.WithEnd);
 			bytecode.PatchShort(exitLoc, bytecode.OpIndex);
 		}
 
 		private void EmitSwitch(SwitchStmt statement)
 		{
-			bytecode.Emit(Op.SetIndex);
+			bytecode.Emit(Opcode.Jmp);
 			var       caseTestLoc  = bytecode.EmitNumberOperandPlaceholder();
 			List<int> caseStarts   = [];
 			List<int> breakPatches = [];
@@ -1991,7 +2023,7 @@ internal static class GS2Compiler
 			_breakPatches.Pop();
 			if (grammar == ScriptGrammar.GS2)
 			{
-				bytecode.Emit(Op.SetIndex);
+				bytecode.Emit(Opcode.Jmp);
 				breakPatches.Add(bytecode.EmitNumberOperandPlaceholder());
 			}
 
@@ -2003,18 +2035,18 @@ internal static class GS2Compiler
 			{
 				if (label != null)
 				{
-					bytecode.Emit(Op.CopyLastOp);
+					bytecode.Emit(Opcode.CopyLastOp);
 					Emit(label);
-					bytecode.Emit(Op.Eq);
-					bytecode.Emit(Op.SetIndexTrue);
+					bytecode.Emit(Opcode.Eq);
+					bytecode.Emit(Opcode.SetIndexTrue);
 				}
-				else bytecode.Emit(Op.SetIndex);
+				else bytecode.Emit(Opcode.Jmp);
 
 				bytecode.EmitDynamicNumber(caseStarts[caseIndex++]);
 			}
 
 			foreach (var patch in breakPatches) bytecode.PatchShort(patch, bytecode.OpIndex);
-			bytecode.Emit(Op.IndexDec);
+			bytecode.Emit(Opcode.IndexDec);
 		}
 
 		private void EmitBreak(string? label)
@@ -2022,13 +2054,13 @@ internal static class GS2Compiler
 			if (label != null)
 			{
 				if (!_labeledLoops.Peek().TryGetValue(label, out var loop)) throw new InvalidOperationException($"break to undefined loop label '{label}'");
-				bytecode.Emit(Op.SetIndex);
+				bytecode.Emit(Opcode.Jmp);
 				loop.Break.Add(bytecode.EmitNumberOperandPlaceholder());
 				return;
 			}
 
 			if (_breakPatches.Count == 0) return;
-			bytecode.Emit(Op.SetIndex);
+			bytecode.Emit(Opcode.Jmp);
 			_breakPatches.Peek().Add(bytecode.EmitNumberOperandPlaceholder());
 		}
 
@@ -2037,19 +2069,19 @@ internal static class GS2Compiler
 			if (label != null)
 			{
 				if (!_labeledLoops.Peek().TryGetValue(label, out var loop)) throw new InvalidOperationException($"continue to undefined loop label '{label}'");
-				bytecode.Emit(Op.SetIndex);
+				bytecode.Emit(Opcode.Jmp);
 				loop.Continue.Add(bytecode.EmitNumberOperandPlaceholder());
 				return;
 			}
 
 			if (_continuePatches.Count == 0) return;
-			bytecode.Emit(Op.SetIndex);
+			bytecode.Emit(Opcode.Jmp);
 			_continuePatches.Peek().Add(bytecode.EmitNumberOperandPlaceholder());
 		}
 
 		private void EmitGoto(GotoStmt statement)
 		{
-			bytecode.Emit(Op.SetIndex);
+			bytecode.Emit(Opcode.Jmp);
 			if (_labelAddresses.Peek().TryGetValue(statement.Label, out var address))
 			{
 				bytecode.EmitDynamicNumber(address);
@@ -2088,34 +2120,34 @@ internal static class GS2Compiler
 			foreach (var arg in statement.Args) Emit(arg);
 			if (grammar == ScriptGrammar.GS2 && statement.Args.Count == 0)
 			{
-				bytecode.Emit(Op.TypeVar);
+				bytecode.Emit(Opcode.TypeVar);
 				bytecode.EmitDynamicStringIndex(bytecode.GetString("unknown_object"));
 			}
-			else bytecode.Emit(Op.InlineNew);
+			else bytecode.Emit(Opcode.InlineNew);
 
-			bytecode.Emit(Op.CopyLastOp);
-			bytecode.Emit(Op.CopyLastOp);
-			bytecode.Emit(Op.CopyLastOp);
-			bytecode.Emit(Op.TypeString);
+			bytecode.Emit(Opcode.CopyLastOp);
+			bytecode.Emit(Opcode.CopyLastOp);
+			bytecode.Emit(Opcode.CopyLastOp);
+			bytecode.Emit(Opcode.TypeString);
 			bytecode.EmitDynamicStringIndex(bytecode.GetString(statement.TypeName));
-			bytecode.Emit(Op.ConvToString);
-			bytecode.Emit(Op.NewObject);
-			bytecode.Emit(Op.Assign);
-			bytecode.Emit(Op.ConvToObject);
-			bytecode.Emit(Op.With);
+			bytecode.Emit(Opcode.ConvToString);
+			bytecode.Emit(Opcode.NewObject);
+			bytecode.Emit(Opcode.Assign);
+			bytecode.Emit(Opcode.ConvToObject);
+			bytecode.Emit(Opcode.With);
 			var withLoc       = bytecode.EmitNumberOperandPlaceholder();
 			var previousCount = _newObjectCount++;
 			foreach (var stmt in statement.Body) EmitStatement(stmt);
-			bytecode.Emit(Op.WithEnd);
+			bytecode.Emit(Opcode.WithEnd);
 			bytecode.PatchShort(withLoc, bytecode.OpIndex);
 			for (var i = 0; i < _newObjectCount - previousCount; ++i)
 			{
-				bytecode.Emit(Op.TypeArray);
-				bytecode.Emit(Op.SwapLastOps);
-				bytecode.Emit(Op.TypeVar);
+				bytecode.Emit(Opcode.TypeArray);
+				bytecode.Emit(Opcode.SwapLastOps);
+				bytecode.Emit(Opcode.TypeVar);
 				bytecode.EmitDynamicStringIndex(bytecode.GetString("addcontrol"));
-				bytecode.Emit(Op.Call);
-				bytecode.Emit(Op.IndexDec);
+				bytecode.Emit(Opcode.Call);
+				bytecode.Emit(Opcode.IndexDec);
 			}
 
 			_newObjectCount--;
@@ -2159,7 +2191,7 @@ internal static class GS2Compiler
 
 			if (_cachedVariables.TryPeek(out var variables) && variables.TryGetValue(expr, out var cachedRegister))
 			{
-				bytecode.Emit(Op.LoadRegister);
+				bytecode.Emit(Opcode.LoadRegister);
 				bytecode.EmitNumberOperand(cachedRegister);
 				return;
 			}
@@ -2168,58 +2200,58 @@ internal static class GS2Compiler
 			{
 				case BinaryExpr { Op: "=", Left: MultiArrayIndexExpr left, Right: var right }:
 					EmitMultiArrayIndex(left, true);
-					if (copyAssignmentTarget) bytecode.Emit(Op.CopyLastOp);
+					if (copyAssignmentTarget) bytecode.Emit(Opcode.CopyLastOp);
 					if (right is BinaryExpr { Op: "=" }) Emit(right, true, true, 0);
 					else Emit(right);
-					bytecode.Emit(Op.ArrayMultiDimAssign);
+					bytecode.Emit(Opcode.ArrayMultiDimAssign);
 					break;
 				case BinaryExpr { Op: "=", Left: ArrayIndexExpr left, Right: var right }:
 					EmitArrayIndex(left, true);
-					if (copyAssignmentTarget && grammar != ScriptGrammar.GS1) bytecode.Emit(Op.CopyLastOp);
+					if (copyAssignmentTarget && grammar != ScriptGrammar.GS1) bytecode.Emit(Opcode.CopyLastOp);
 					if (right is BinaryExpr { Op: "=" }) Emit(right, true, true, 0);
 					else Emit(right);
-					bytecode.Emit(Op.ArrayAssign);
+					bytecode.Emit(Opcode.ArrayAssign);
 					if (copyAssignmentTarget && grammar == ScriptGrammar.GS1) EmitArrayIndex(left, false);
 					break;
 				case BinaryExpr { Op: "=", Left: var left, Right: var right }:
 					Emit(left);
-					if (copyAssignmentTarget) bytecode.Emit(Op.CopyLastOp);
+					if (copyAssignmentTarget) bytecode.Emit(Opcode.CopyLastOp);
 					if (right is BinaryExpr { Op: "=" }) Emit(right, true, true, 0);
 					else Emit(right);
-					bytecode.Emit(Op.Assign);
+					bytecode.Emit(Opcode.Assign);
 					break;
 				case BinaryExpr { Op: var op, Left: MultiArrayIndexExpr left, Right: var right } when IsCompoundAssign(op):
 					EmitMultiArrayIndex(left, true);
 					EmitMultiArrayIndex(left, false);
-					bytecode.Emit(op == "@=" ? Op.ConvToString : Op.ConvToFloat);
+					bytecode.Emit(op == "@=" ? Opcode.ConvToString : Opcode.ConvToFloat);
 					Emit(right);
-					if (op == "@=" && NeedsStringConversion(right)) bytecode.Emit(Op.ConvToString);
-					else if (op != "@=" && NeedsNumericConversion(right)) bytecode.Emit(Op.ConvToFloat);
+					if (op == "@=" && NeedsStringConversion(right)) bytecode.Emit(Opcode.ConvToString);
+					else if (op != "@=" && NeedsNumericConversion(right)) bytecode.Emit(Opcode.ConvToFloat);
 					bytecode.Emit(CompoundOpcode(op));
-					bytecode.Emit(Op.ArrayMultiDimAssign);
+					bytecode.Emit(Opcode.ArrayMultiDimAssign);
 					if (grammar == ScriptGrammar.GS2 && preservePostfixValue) EmitMultiArrayIndex(left, false);
 					break;
 				case BinaryExpr { Op: var op, Left: ArrayIndexExpr left, Right: var right } when IsCompoundAssign(op):
 					EmitArrayIndex(left, true);
 					EmitArrayIndex(left, false);
-					bytecode.Emit(op == "@=" ? Op.ConvToString : Op.ConvToFloat);
+					bytecode.Emit(op == "@=" ? Opcode.ConvToString : Opcode.ConvToFloat);
 					Emit(right);
-					if (op == "@=" && NeedsStringConversion(right)) bytecode.Emit(Op.ConvToString);
-					else if (op != "@=" && NeedsNumericConversion(right)) bytecode.Emit(Op.ConvToFloat);
+					if (op == "@=" && NeedsStringConversion(right)) bytecode.Emit(Opcode.ConvToString);
+					else if (op != "@=" && NeedsNumericConversion(right)) bytecode.Emit(Opcode.ConvToFloat);
 					bytecode.Emit(CompoundOpcode(op));
-					bytecode.Emit(Op.ArrayAssign);
+					bytecode.Emit(Opcode.ArrayAssign);
 					if (grammar == ScriptGrammar.GS2 && preservePostfixValue) EmitArrayIndex(left, false);
 					break;
 				case BinaryExpr { Op: var op, Left: var left, Right: var right } when IsCompoundAssign(op):
 					Emit(left);
-					if (grammar == ScriptGrammar.GS2 && preservePostfixValue) bytecode.Emit(Op.CopyLastOp);
-					bytecode.Emit(Op.CopyLastOp);
-					bytecode.Emit(op == "@=" ? Op.ConvToString : Op.ConvToFloat);
+					if (grammar == ScriptGrammar.GS2 && preservePostfixValue) bytecode.Emit(Opcode.CopyLastOp);
+					bytecode.Emit(Opcode.CopyLastOp);
+					bytecode.Emit(op == "@=" ? Opcode.ConvToString : Opcode.ConvToFloat);
 					Emit(right);
-					if (op == "@=" && NeedsStringConversion(right)) bytecode.Emit(Op.ConvToString);
-					else if (op != "@=" && NeedsNumericConversion(right)) bytecode.Emit(Op.ConvToFloat);
+					if (op == "@=" && NeedsStringConversion(right)) bytecode.Emit(Opcode.ConvToString);
+					else if (op != "@=" && NeedsNumericConversion(right)) bytecode.Emit(Opcode.ConvToFloat);
 					bytecode.Emit(CompoundOpcode(op));
-					bytecode.Emit(Op.Assign);
+					bytecode.Emit(Opcode.Assign);
 					break;
 				case BinaryExpr { Op: "&&" or "||" } logical:
 					if (!controlLogical && !leftNegatedControlAnd && HasNestedLogical(logical, logical.Op))
@@ -2260,7 +2292,7 @@ internal static class GS2Compiler
 						true,
 						passNegatedControlAnd
 					);
-					if (leftAssignment || !IsBooleanExpr(logical.Left) && NeedsNumericConversion(logical.Left)) bytecode.Emit(Op.ConvToFloat);
+					if (leftAssignment || !IsBooleanExpr(logical.Left) && NeedsNumericConversion(logical.Left)) bytecode.Emit(Opcode.ConvToFloat);
 					if (localSuccessPatches != null)
 					{
 						for (var i = localSuccessStart; i < localSuccessPatches.Count; ++i) bytecode.PatchShort(localSuccessPatches[i], bytecode.OpIndex);
@@ -2273,7 +2305,7 @@ internal static class GS2Compiler
 						localFailPatches.RemoveRange(localFailStart, localFailPatches.Count - localFailStart);
 					}
 
-					bytecode.Emit(logical.Op == "&&" && controlLogical ? Op.If : logical.Op == "&&" ? Op.And : Op.Or);
+					bytecode.Emit(logical.Op == "&&" && controlLogical ? Opcode.If : logical.Op == "&&" ? Opcode.And : Opcode.Or);
 					var loc             = bytecode.EmitNumberOperandPlaceholder();
 					var rightAssignment = grammar == ScriptGrammar.GS1 && logical.Right is BinaryExpr { Op: "=" };
 					Emit(
@@ -2284,8 +2316,8 @@ internal static class GS2Compiler
 						controlLogical,
 						negatedLogical
 					);
-					if (rightAssignment || !IsBooleanExpr(logical.Right) && NeedsNumericConversion(logical.Right)) bytecode.Emit(Op.ConvToFloat);
-					if (logicalInline) bytecode.Emit(Op.InlineConditional);
+					if (rightAssignment || !IsBooleanExpr(logical.Right) && NeedsNumericConversion(logical.Right)) bytecode.Emit(Opcode.ConvToFloat);
+					if (logicalInline) bytecode.Emit(Opcode.InlineConditional);
 					if (logical.Op == "&&" && controlLogical && _conditionFailPatches.Count > 0) _conditionFailPatches.Peek().Add(loc);
 					else if (logical.Op == "||" && controlLogical && _conditionSuccessPatches.Count > 0) _conditionSuccessPatches.Peek().Add(loc);
 					else bytecode.PatchShort(loc, bytecode.OpIndex - (logicalInline ? 1 : 0) + (!logicalInline ? suppressedLogicalPatchOffset : 0));
@@ -2295,111 +2327,111 @@ internal static class GS2Compiler
 					break;
 				case BinaryExpr { Op: "@", Left: var left, Right: var right } when _dynamicMethodName:
 					Emit(left);
-					if (grammar == ScriptGrammar.GS1 && left is StringExpr || NeedsStringConversion(left)) bytecode.Emit(Op.ConvToString);
+					if (grammar == ScriptGrammar.GS1 && left is StringExpr || NeedsStringConversion(left)) bytecode.Emit(Opcode.ConvToString);
 					Emit(right);
-					if (right is not StringExpr) bytecode.Emit(Op.ConvToString);
-					bytecode.Emit(Op.Join);
+					if (right is not StringExpr) bytecode.Emit(Opcode.ConvToString);
+					bytecode.Emit(Opcode.Join);
 					break;
 				case BinaryExpr { Op: " " or "\n" or "\t", Left: var left, Right: var right } spacedConcat:
 					if (grammar == ScriptGrammar.GS2 && left is StringExpr prefix) Emit(new StringExpr(prefix.Value + spacedConcat.Op));
 					else
 					{
 						Emit(left);
-						if (NeedsStringConversion(left)) bytecode.Emit(Op.ConvToString);
-						bytecode.Emit(Op.TypeString);
+						if (NeedsStringConversion(left)) bytecode.Emit(Opcode.ConvToString);
+						bytecode.Emit(Opcode.TypeString);
 						bytecode.EmitDynamicStringIndex(bytecode.GetString(spacedConcat.Op));
-						bytecode.Emit(Op.Join);
+						bytecode.Emit(Opcode.Join);
 					}
 
 					Emit(right);
-					if (NeedsStringConversion(right)) bytecode.Emit(Op.ConvToString);
-					bytecode.Emit(Op.Join);
+					if (NeedsStringConversion(right)) bytecode.Emit(Opcode.ConvToString);
+					bytecode.Emit(Opcode.Join);
 					break;
 				case InExpr inExpr:
 					Emit(inExpr.Expression);
 					Emit(inExpr.Lower);
 					if (inExpr.Upper != null)
 					{
-						if (!IsNumberExpr(inExpr.Lower)) bytecode.Emit(Op.ConvToFloat);
+						if (!IsNumberExpr(inExpr.Lower)) bytecode.Emit(Opcode.ConvToFloat);
 						Emit(inExpr.Upper);
-						if (!IsNumberExpr(inExpr.Upper)) bytecode.Emit(Op.ConvToFloat);
-						bytecode.Emit(Op.InRange);
+						if (!IsNumberExpr(inExpr.Upper)) bytecode.Emit(Opcode.ConvToFloat);
+						bytecode.Emit(Opcode.InRange);
 						bytecode.EmitNumberOperand((inExpr.LowerExclusive ? 2 : 0) | (inExpr.UpperExclusive ? 1 : 0));
 					}
 					else
 					{
-						bytecode.Emit(Op.ConvToObject);
-						bytecode.Emit(Op.InObj);
+						bytecode.Emit(Opcode.ConvToObject);
+						bytecode.Emit(Opcode.InObj);
 					}
 
 					break;
 				case BinaryExpr { Op: "==" or "!=", Left: StringCastExpr { Expression: MemberExpr left }, Right: StringCastExpr { Expression: MemberExpr right } } castCompare when grammar == ScriptGrammar.GS1:
 					Emit(left);
 					Emit(right);
-					bytecode.Emit(Op.ConvToString);
+					bytecode.Emit(Opcode.ConvToString);
 					bytecode.Emit(BinaryOpcode(castCompare.Op));
-					bytecode.Emit(Op.ConvToString);
+					bytecode.Emit(Opcode.ConvToString);
 					break;
 				case BinaryExpr { Op: "==" or "!=", Left: StringCastExpr { Expression: MemberExpr left }, Right: StringCastExpr { Expression: ArrayLiteralExpr right } } arrayCastCompare when grammar == ScriptGrammar.GS1:
 					Emit(left);
 					Emit(new StringCastExpr(right));
 					bytecode.Emit(BinaryOpcode(arrayCastCompare.Op));
-					bytecode.Emit(Op.ConvToString);
+					bytecode.Emit(Opcode.ConvToString);
 					break;
 				case BinaryExpr { Op: "==" or "!=", Left: StringCastExpr { Expression: ArrayLiteralExpr left }, Right: StringCastExpr { Expression: ArrayLiteralExpr right } } arrayPairCastCompare when grammar == ScriptGrammar.GS1:
 					Emit(left);
 					Emit(new StringCastExpr(right));
 					bytecode.Emit(BinaryOpcode(arrayPairCastCompare.Op));
-					bytecode.Emit(Op.ConvToString);
+					bytecode.Emit(Opcode.ConvToString);
 					break;
 				case BinaryExpr binary:
 					Emit(binary.Left);
-					if (binary.Op == "@" && NeedsStringConversion(binary.Left)) bytecode.Emit(Op.ConvToString);
-					if ((IsNumericOp(binary.Op) || IsComparisonOp(binary.Op)) && NeedsNumericConversion(binary.Left)) bytecode.Emit(Op.ConvToFloat);
-					if (IsComparisonOp(binary.Op) && binary.Left is UnaryExpr { Op: "++" or "--", Postfix: true }) bytecode.Emit(Op.ConvToFloat);
-					if (binary.Op == "%" && binary.Left is BinaryExpr { Op: "+=" or "-=" or "*=" or "/=" or "%=" }) bytecode.Emit(Op.ConvToFloat);
-					if ((grammar == ScriptGrammar.GS2 ? binary.Op is "&" or "|" or "xor" or "<<" or ">>" : binary.Op == "&") && NeedsNumericConversion(binary.Left)) bytecode.Emit(Op.ConvToFloat);
-					if (grammar == ScriptGrammar.GS1 && binary.Op == "@" && binary.Left is StringCastExpr && binary.Right is TernaryExpr) bytecode.Emit(Op.ConvToString);
-					if (grammar == ScriptGrammar.GS1 && IsNumericOp(binary.Op) && UsesPreviewSpriteTernary(binary.Left)) bytecode.Emit(Op.ConvToFloat);
+					if (binary.Op == "@" && NeedsStringConversion(binary.Left)) bytecode.Emit(Opcode.ConvToString);
+					if ((IsNumericOp(binary.Op) || IsComparisonOp(binary.Op)) && NeedsNumericConversion(binary.Left)) bytecode.Emit(Opcode.ConvToFloat);
+					if (IsComparisonOp(binary.Op) && binary.Left is UnaryExpr { Op: "++" or "--", Postfix: true }) bytecode.Emit(Opcode.ConvToFloat);
+					if (binary.Op == "%" && binary.Left is BinaryExpr { Op: "+=" or "-=" or "*=" or "/=" or "%=" }) bytecode.Emit(Opcode.ConvToFloat);
+					if ((grammar == ScriptGrammar.GS2 ? binary.Op is "&" or "|" or "xor" or "<<" or ">>" : binary.Op == "&") && NeedsNumericConversion(binary.Left)) bytecode.Emit(Opcode.ConvToFloat);
+					if (grammar == ScriptGrammar.GS1 && binary.Op == "@" && binary.Left is StringCastExpr && binary.Right is TernaryExpr) bytecode.Emit(Opcode.ConvToString);
+					if (grammar == ScriptGrammar.GS1 && IsNumericOp(binary.Op) && UsesPreviewSpriteTernary(binary.Left)) bytecode.Emit(Opcode.ConvToFloat);
 					Emit(binary.Right, binary.Right is BinaryExpr { Op: "=" }, true, 0);
-					if ((IsNumericOp(binary.Op) || IsComparisonOp(binary.Op)) && NeedsNumericConversion(binary.Right)) bytecode.Emit(Op.ConvToFloat);
-					if (grammar == ScriptGrammar.GS2 && binary.Op is "&" or "|" or "xor" or "<<" or ">>" && NeedsNumericConversion(binary.Right)) bytecode.Emit(Op.ConvToFloat);
-					if (grammar == ScriptGrammar.GS1 && IsNumericOp(binary.Op) && UsesSignTernary(binary.Right)) bytecode.Emit(Op.ConvToFloat);
-					if (binary.Op == "@" && (_dynamicMethodName || NeedsStringConversion(binary.Right))) bytecode.Emit(Op.ConvToString);
+					if ((IsNumericOp(binary.Op) || IsComparisonOp(binary.Op)) && NeedsNumericConversion(binary.Right)) bytecode.Emit(Opcode.ConvToFloat);
+					if (grammar == ScriptGrammar.GS2 && binary.Op is "&" or "|" or "xor" or "<<" or ">>" && NeedsNumericConversion(binary.Right)) bytecode.Emit(Opcode.ConvToFloat);
+					if (grammar == ScriptGrammar.GS1 && IsNumericOp(binary.Op) && UsesSignTernary(binary.Right)) bytecode.Emit(Opcode.ConvToFloat);
+					if (binary.Op == "@" && (_dynamicMethodName || NeedsStringConversion(binary.Right))) bytecode.Emit(Opcode.ConvToString);
 					bytecode.Emit(BinaryOpcode(binary.Op));
 					break;
 				case MemberExpr member:
 					EmitMemberOwner(member.Object);
-					if (NeedsObjectConversion(member.Object) || member.Object is not IdentifierExpr { Name: "this" } && variables?.ContainsKey(member.Object) == true || member.Object is ArrayIndexExpr) bytecode.Emit(Op.ConvToObject);
-					bytecode.Emit(Op.TypeVar);
+					if (NeedsObjectConversion(member.Object) || member.Object is not IdentifierExpr { Name: "this" } && variables?.ContainsKey(member.Object) == true || member.Object is ArrayIndexExpr) bytecode.Emit(Opcode.ConvToObject);
+					bytecode.Emit(Opcode.TypeVar);
 					bytecode.EmitDynamicStringIndex(bytecode.GetString(member.Name));
-					bytecode.Emit(Op.MemberAccess);
+					bytecode.Emit(Opcode.MemberAccess);
 					break;
 				case DynamicMemberExpr member:
 					EmitMemberOwner(member.Object, true);
-					if (NeedsObjectConversion(member.Object) || grammar == ScriptGrammar.GS2 && member.Object is ArrayIndexExpr or IdentifierExpr { Name: "this" }) bytecode.Emit(Op.ConvToObject);
+					if (NeedsObjectConversion(member.Object) || grammar == ScriptGrammar.GS2 && member.Object is ArrayIndexExpr or IdentifierExpr { Name: "this" }) bytecode.Emit(Opcode.ConvToObject);
 					if (grammar == ScriptGrammar.GS1 && member.Name is StringCastExpr { Expression: IdentifierExpr or MemberExpr { Object: IdentifierExpr { Name: "temp" } } } nameCast)
 					{
 						Emit(nameCast.Expression);
-						if (NeedsNumericConversion(nameCast.Expression)) bytecode.Emit(Op.ConvToFloat);
-						bytecode.Emit(Op.Add);
+						if (NeedsNumericConversion(nameCast.Expression)) bytecode.Emit(Opcode.ConvToFloat);
+						bytecode.Emit(Opcode.Add);
 					}
 					else
 					{
 						EmitDynamicMemberName(member.Name);
-						if (grammar == ScriptGrammar.GS1 && NeedsStringConversion(member.Name)) bytecode.Emit(Op.ConvToString);
+						if (grammar == ScriptGrammar.GS1 && NeedsStringConversion(member.Name)) bytecode.Emit(Opcode.ConvToString);
 					}
 
-					bytecode.Emit(Op.MemberAccess);
+					bytecode.Emit(Opcode.MemberAccess);
 					break;
 				case StringCastExpr { Expression: IdentifierExpr id } when grammar == ScriptGrammar.GS1 && _tempAliases.TryPeek(out var tempAliases) && tempAliases.Contains(id.Name):
 					Emit(new MemberExpr(new IdentifierExpr("temp"), id.Name));
-					bytecode.Emit(Op.ConvToString);
+					bytecode.Emit(Opcode.ConvToString);
 					break;
 				case StringCastExpr cast:
 					Emit(cast.Expression);
-					if (grammar == ScriptGrammar.GS1 || NeedsStringConversion(cast.Expression)) bytecode.Emit(Op.ConvToString);
-					if (grammar == ScriptGrammar.GS1 && ExpressionTypeOf(cast.Expression) == ExprType.Array) bytecode.Emit(Op.MemberAccess);
+					if (grammar == ScriptGrammar.GS1 || NeedsStringConversion(cast.Expression)) bytecode.Emit(Opcode.ConvToString);
+					if (grammar == ScriptGrammar.GS1 && ExpressionTypeOf(cast.Expression) == ExprType.Array) bytecode.Emit(Opcode.MemberAccess);
 					break;
 				case ArrayIndexExpr index:
 					EmitArrayIndex(index, false);
@@ -2411,8 +2443,8 @@ internal static class GS2Compiler
 					if (grammar == ScriptGrammar.GS1)
 					{
 						Emit(dynamicVar.Name);
-						if (NeedsStringConversion(dynamicVar.Name)) bytecode.Emit(Op.ConvToString);
-						bytecode.Emit(Op.ObjFromString);
+						if (NeedsStringConversion(dynamicVar.Name)) bytecode.Emit(Opcode.ConvToString);
+						bytecode.Emit(Opcode.ObjFromString);
 					}
 					else Emit(new CallExpr("makevar", [dynamicVar.Name]));
 
@@ -2421,57 +2453,59 @@ internal static class GS2Compiler
 					Emit(constant);
 					break;
 				case IdentifierExpr { Name: "this" } when grammar == ScriptGrammar.GS1:
-					bytecode.Emit(Op.This);
+					bytecode.Emit(Opcode.This);
 					break;
 				case IdentifierExpr { Name: "temp" } when grammar == ScriptGrammar.GS1:
-					bytecode.Emit(Op.Temp);
+					bytecode.Emit(Opcode.Temp);
 					break;
 				case IdentifierExpr { Name: "thiso" } when grammar == ScriptGrammar.GS1:
-					bytecode.Emit(Op.Thiso);
+					bytecode.Emit(Opcode.Thiso);
 					break;
 				case IdentifierExpr { Name: "player" }:
-					bytecode.Emit(Op.Player);
+					bytecode.Emit(Opcode.Player);
 					break;
 				case IdentifierExpr { Name: "playero" } when grammar == ScriptGrammar.GS1:
-					bytecode.Emit(Op.Playero);
+					bytecode.Emit(Opcode.Playero);
 					break;
 				case IdentifierExpr { Name: "level" }:
-					bytecode.Emit(Op.Level);
+					bytecode.Emit(Opcode.Level);
 					break;
 				case IdentifierExpr { Name: "pi" }:
-					bytecode.Emit(Op.Pi);
+					bytecode.Emit(Opcode.Pi);
 					break;
 				case IdentifierExpr { Name: "params" }:
-					bytecode.Emit(Op.Params);
+					bytecode.Emit(Opcode.Params);
 					break;
 				case IdentifierExpr id:
-					bytecode.Emit(Op.TypeVar);
+					bytecode.Emit(Opcode.TypeVar);
 					bytecode.EmitDynamicStringIndex(bytecode.GetString(id.Name));
 					break;
 				case EnumExpr enumExpr:
-					bytecode.Emit(Op.TypeNumber);
-					bytecode.EmitDynamicNumber(enums.TryGetValue(enumExpr.EnumName, out var members) && members.TryGetValue(enumExpr.MemberName, out var value) ? value : 0);
+					// Match the official compiler: Enum::Member is emitted as a runtime
+					// variable reference, never constant-folded to its numeric value.
+					bytecode.Emit(Opcode.TypeVar);
+					bytecode.EmitDynamicStringIndex(bytecode.GetString(enumExpr.EnumName + "::" + enumExpr.MemberName));
 					break;
 				case NumberExpr number:
 					EmitNativeNumber(double.Parse(number.Text, CultureInfo.InvariantCulture));
 					break;
 				case StringExpr str:
-					bytecode.Emit(Op.TypeString);
+					bytecode.Emit(Opcode.TypeString);
 					bytecode.EmitDynamicStringIndex(bytecode.GetString(str.Value));
 					break;
 				case BoolExpr boolean:
-					bytecode.Emit(boolean.Value ? Op.TypeTrue : Op.TypeFalse);
+					bytecode.Emit(boolean.Value ? Opcode.TypeTrue : Opcode.TypeFalse);
 					break;
 				case NullExpr:
-					bytecode.Emit(Op.TypeNull);
+					bytecode.Emit(Opcode.TypeNull);
 					break;
 				case UnaryExpr { Op: "-", Expression: NumberExpr number }:
 					EmitNativeNumber(-double.Parse(number.Text, CultureInfo.InvariantCulture));
 					break;
 				case UnaryExpr { Op: "-", Expression: var unaryValue }:
 					Emit(unaryValue);
-					if (NeedsNumericConversion(unaryValue) || grammar == ScriptGrammar.GS1 && unaryValue is CastExpr or TernaryExpr) bytecode.Emit(Op.ConvToFloat);
-					bytecode.Emit(Op.UnarySub);
+					if (NeedsNumericConversion(unaryValue) || grammar == ScriptGrammar.GS1 && unaryValue is CastExpr or TernaryExpr) bytecode.Emit(Opcode.ConvToFloat);
+					bytecode.Emit(Opcode.UnarySub);
 					break;
 				case UnaryExpr { Op: "!", Expression: var notValue }:
 					Emit(
@@ -2482,71 +2516,71 @@ internal static class GS2Compiler
 						leftNegatedControlAnd,
 						true
 					);
-					if (!IsBooleanExpr(notValue)) bytecode.Emit(Op.ConvToFloat);
-					bytecode.Emit(Op.Not);
+					if (!IsBooleanExpr(notValue)) bytecode.Emit(Opcode.ConvToFloat);
+					bytecode.Emit(Opcode.Not);
 					break;
 				case UnaryExpr { Op: "~", Expression: var invertValue }:
 					Emit(invertValue);
-					if (!IsNumberExpr(invertValue)) bytecode.Emit(Op.ConvToFloat);
-					bytecode.Emit(Op.BitInvert);
+					if (!IsNumberExpr(invertValue)) bytecode.Emit(Opcode.ConvToFloat);
+					bytecode.Emit(Opcode.BitInvert);
 					break;
 				case UnaryExpr { Op: "++", Expression: var incValue, Postfix: true }:
 					Emit(incValue);
 					if (preservePostfixValue)
 					{
-						bytecode.Emit(Op.CopyLastOp);
-						bytecode.Emit(Op.ConvToFloat);
-						bytecode.Emit(Op.SwapLastOps);
+						bytecode.Emit(Opcode.CopyLastOp);
+						bytecode.Emit(Opcode.ConvToFloat);
+						bytecode.Emit(Opcode.SwapLastOps);
 					}
 
-					bytecode.Emit(Op.Inc);
-					bytecode.Emit(Op.IndexDec);
+					bytecode.Emit(Opcode.Inc);
+					bytecode.Emit(Opcode.IndexDec);
 					break;
 				case UnaryExpr { Op: "--", Expression: var decValue, Postfix: true }:
 					Emit(decValue);
 					if (preservePostfixValue)
 					{
-						bytecode.Emit(Op.CopyLastOp);
-						bytecode.Emit(Op.ConvToFloat);
-						bytecode.Emit(Op.SwapLastOps);
+						bytecode.Emit(Opcode.CopyLastOp);
+						bytecode.Emit(Opcode.ConvToFloat);
+						bytecode.Emit(Opcode.SwapLastOps);
 					}
 
-					bytecode.Emit(Op.Dec);
-					bytecode.Emit(Op.IndexDec);
+					bytecode.Emit(Opcode.Dec);
+					bytecode.Emit(Opcode.IndexDec);
 					break;
 				case UnaryExpr { Op: "++", Expression: var incValue }:
 					Emit(incValue);
-					bytecode.Emit(Op.Inc);
-					if (!preservePostfixValue) bytecode.Emit(Op.IndexDec);
+					bytecode.Emit(Opcode.Inc);
+					if (!preservePostfixValue) bytecode.Emit(Opcode.IndexDec);
 					break;
 				case UnaryExpr { Op: "--", Expression: var decValue }:
 					Emit(decValue);
-					bytecode.Emit(Op.Dec);
-					if (!preservePostfixValue) bytecode.Emit(Op.IndexDec);
+					bytecode.Emit(Opcode.Dec);
+					if (!preservePostfixValue) bytecode.Emit(Opcode.IndexDec);
 					break;
 				case CastExpr { Type: "int", Expression: var castValue }:
 					Emit(castValue);
-					if (!IsNumberExpr(castValue)) bytecode.Emit(Op.ConvToFloat);
-					bytecode.Emit(Op.Int);
+					if (!IsNumberExpr(castValue)) bytecode.Emit(Opcode.ConvToFloat);
+					bytecode.Emit(Opcode.Int);
 					break;
 				case CastExpr { Type: "float", Expression: var castValue }:
 					Emit(castValue);
-					if (!IsNumberExpr(castValue)) bytecode.Emit(Op.ConvToFloat);
+					if (!IsNumberExpr(castValue)) bytecode.Emit(Opcode.ConvToFloat);
 					break;
 				case CastExpr { Type: "_", Expression: var castValue }:
 					Emit(castValue);
-					if (castValue is not StringExpr) bytecode.Emit(Op.ConvToString);
-					bytecode.Emit(Op.Translate);
+					if (castValue is not StringExpr) bytecode.Emit(Opcode.ConvToString);
+					bytecode.Emit(Opcode.Translate);
 					break;
 				case CallExpr { Name: "strtofloat", Args: [var stringValue] } when grammar == ScriptGrammar.GS1:
 					Emit(stringValue);
-					bytecode.Emit(Op.ConvToFloat);
+					bytecode.Emit(Opcode.ConvToFloat);
 					break;
 				case CallExpr { Name: "random" or "min" or "max" or "log" } call:
 					foreach (var argument in call.Args)
 					{
 						Emit(argument);
-						if (!IsNumberExpr(argument) || grammar == ScriptGrammar.GS1 && argument is CastExpr { Type: "float" }) bytecode.Emit(Op.ConvToFloat);
+						if (!IsNumberExpr(argument) || grammar == ScriptGrammar.GS1 && argument is CastExpr { Type: "float" }) bytecode.Emit(Opcode.ConvToFloat);
 					}
 
 					bytecode.Emit(BuiltInCalls[call.Name]);
@@ -2555,7 +2589,7 @@ internal static class GS2Compiler
 					foreach (var argument in grammar == ScriptGrammar.GS2 ? call.Args : call.Args.AsEnumerable().Reverse())
 					{
 						Emit(argument);
-						if (!IsNumberExpr(argument) || grammar == ScriptGrammar.GS1 && argument is CastExpr { Type: "float" }) bytecode.Emit(Op.ConvToFloat);
+						if (!IsNumberExpr(argument) || grammar == ScriptGrammar.GS1 && argument is CastExpr { Type: "float" }) bytecode.Emit(Opcode.ConvToFloat);
 					}
 
 					bytecode.Emit(builtIn);
@@ -2564,7 +2598,7 @@ internal static class GS2Compiler
 					for (var i = 0; i < call.Args.Count; ++i)
 					{
 						Emit(call.Args[i]);
-						if (!IsNumberExpr(call.Args[i]) || grammar == ScriptGrammar.GS1 && call.Args[i] is CastExpr { Type: "float" }) bytecode.Emit(Op.ConvToFloat);
+						if (!IsNumberExpr(call.Args[i]) || grammar == ScriptGrammar.GS1 && call.Args[i] is CastExpr { Type: "float" }) bytecode.Emit(Opcode.ConvToFloat);
 					}
 
 					bytecode.Emit(builtIn);
@@ -2573,169 +2607,169 @@ internal static class GS2Compiler
 					foreach (var argument in call.Args)
 					{
 						Emit(argument);
-						bytecode.Emit(Op.ObjFromString);
-						bytecode.Emit(Op.ConvToObject);
+						bytecode.Emit(Opcode.ObjFromString);
+						bytecode.Emit(Opcode.ConvToObject);
 					}
 
-					bytecode.Emit(Op.ObjSize);
+					bytecode.Emit(Opcode.ObjSize);
 					break;
 				case CallExpr { Name: "arraylen" or "sarraylen" } call:
 					for (var i = call.Args.Count - 1; i >= 0; --i)
 					{
 						Emit(call.Args[i]);
-						if (NeedsObjectConversion(call.Args[i])) bytecode.Emit(Op.ConvToObject);
+						if (NeedsObjectConversion(call.Args[i])) bytecode.Emit(Opcode.ConvToObject);
 					}
 
-					bytecode.Emit(Op.ObjSize);
+					bytecode.Emit(Opcode.ObjSize);
 					break;
 				case CallExpr { Name: "waitfor" } call:
 					for (var i = 0; i < call.Args.Count; ++i)
 					{
 						Emit(call.Args[i]);
-						if (i < 2 && NeedsStringConversion(call.Args[i])) bytecode.Emit(Op.ConvToString);
-						else if (i == 2 && !IsNumberExpr(call.Args[i])) bytecode.Emit(Op.ConvToFloat);
+						if (i < 2 && NeedsStringConversion(call.Args[i])) bytecode.Emit(Opcode.ConvToString);
+						else if (i == 2 && !IsNumberExpr(call.Args[i])) bytecode.Emit(Opcode.ConvToFloat);
 					}
 
-					bytecode.Emit(Op.WaitFor);
+					bytecode.Emit(Opcode.WaitFor);
 					break;
 				case CallExpr { Name: "sleep" } call:
 					for (var i = 0; i < call.Args.Count; ++i)
 					{
 						Emit(call.Args[i]);
-						if (!IsNumberExpr(call.Args[i])) bytecode.Emit(Op.ConvToFloat);
+						if (!IsNumberExpr(call.Args[i])) bytecode.Emit(Opcode.ConvToFloat);
 					}
 
-					bytecode.Emit(Op.Sleep);
+					bytecode.Emit(Opcode.Sleep);
 					break;
 				case CallExpr { Name: "setarray" } call:
 					if (call.Args.Count > 0)
 					{
 						Emit(call.Args[0]);
-						if (NeedsObjectConversion(call.Args[0])) bytecode.Emit(Op.ConvToObject);
+						if (NeedsObjectConversion(call.Args[0])) bytecode.Emit(Opcode.ConvToObject);
 					}
 
 					if (call.Args.Count > 1)
 					{
 						Emit(call.Args[1]);
-						if (!IsNumberExpr(call.Args[1])) bytecode.Emit(Op.ConvToFloat);
+						if (!IsNumberExpr(call.Args[1])) bytecode.Emit(Opcode.ConvToFloat);
 					}
 
-					bytecode.Emit(Op.SetArray);
+					bytecode.Emit(Opcode.SetArray);
 					break;
 				case CallExpr { Name: "makevar" } call:
 					for (var i = call.Args.Count - 1; i >= 0; --i)
 					{
 						Emit(call.Args[i]);
-						if (grammar == ScriptGrammar.GS1 || NeedsStringConversion(call.Args[i])) bytecode.Emit(Op.ConvToString);
+						if (grammar == ScriptGrammar.GS1 || NeedsStringConversion(call.Args[i])) bytecode.Emit(Opcode.ConvToString);
 					}
 
-					bytecode.Emit(Op.MakeVar);
+					bytecode.Emit(Opcode.MakeVar);
 					break;
 				case CallExpr { Name: "format" } call:
-					bytecode.Emit(Op.TypeArray);
+					bytecode.Emit(Opcode.TypeArray);
 					for (var i = call.Args.Count - 1; i >= 0; --i) Emit(call.Args[i]);
-					bytecode.Emit(Op.Format);
+					bytecode.Emit(Opcode.Format);
 					break;
 				case CallExpr call:
-					bytecode.Emit(Op.TypeArray);
+					bytecode.Emit(Opcode.TypeArray);
 					for (var i = call.Args.Count - 1; i >= 0; --i) Emit(call.Args[i]);
 					if (variables != null && variables.TryGetValue(new IdentifierExpr(call.Name), out var register))
 					{
-						bytecode.Emit(Op.LoadRegister);
+						bytecode.Emit(Opcode.LoadRegister);
 						bytecode.EmitNumberOperand(register);
 					}
 					else
 					{
-						bytecode.Emit(Op.TypeVar);
+						bytecode.Emit(Opcode.TypeVar);
 						bytecode.EmitDynamicStringIndex(bytecode.GetString(call.Name));
 					}
 
-					bytecode.Emit(Op.Call);
+					bytecode.Emit(Opcode.Call);
 					break;
 				case ChainedCallExpr call:
-					bytecode.Emit(Op.TypeArray);
+					bytecode.Emit(Opcode.TypeArray);
 					for (var i = call.Args.Count - 1; i >= 0; --i) Emit(call.Args[i]);
 					Emit(call.Call);
-					bytecode.Emit(Op.Call);
+					bytecode.Emit(Opcode.Call);
 					break;
 				case DynamicMethodCallExpr call:
-					bytecode.Emit(Op.TypeArray);
+					bytecode.Emit(Opcode.TypeArray);
 					for (var i = call.Args.Count - 1; i >= 0; --i) Emit(call.Args[i]);
 					EmitMemberOwner(call.Object, true);
-					if (NeedsObjectConversion(call.Object) || call.Object is ArrayIndexExpr || grammar == ScriptGrammar.GS2 && call.Object is IdentifierExpr { Name: "this" }) bytecode.Emit(Op.ConvToObject);
+					if (NeedsObjectConversion(call.Object) || call.Object is ArrayIndexExpr || grammar == ScriptGrammar.GS2 && call.Object is IdentifierExpr { Name: "this" }) bytecode.Emit(Opcode.ConvToObject);
 					_dynamicMethodName = grammar == ScriptGrammar.GS1 || call.Name is StringCastExpr;
 					if (grammar == ScriptGrammar.GS1 && call.Name is StringCastExpr { Expression: IdentifierExpr or MemberExpr { Object: IdentifierExpr { Name: "temp" } } } callNameCast)
 					{
 						Emit(callNameCast.Expression);
-						if (NeedsNumericConversion(callNameCast.Expression)) bytecode.Emit(Op.ConvToFloat);
-						bytecode.Emit(Op.Add);
+						if (NeedsNumericConversion(callNameCast.Expression)) bytecode.Emit(Opcode.ConvToFloat);
+						bytecode.Emit(Opcode.Add);
 					}
 					else if (call.Name is StringCastExpr { Expression: BinaryExpr { Op: "@" } nameConcat }) EmitDynamicMemberName(nameConcat);
 					else EmitDynamicMemberName(call.Name);
 
 					_dynamicMethodName = false;
-					if (grammar == ScriptGrammar.GS1 && NeedsStringConversion(call.Name) && call.Name is not BinaryExpr { Op: "@" }) bytecode.Emit(Op.ConvToString);
-					bytecode.Emit(Op.MemberAccess);
-					bytecode.Emit(Op.Call);
+					if (grammar == ScriptGrammar.GS1 && NeedsStringConversion(call.Name) && call.Name is not BinaryExpr { Op: "@" }) bytecode.Emit(Opcode.ConvToString);
+					bytecode.Emit(Opcode.MemberAccess);
+					bytecode.Emit(Opcode.Call);
 					break;
 				case MethodCallExpr call:
 					if (grammar == ScriptGrammar.GS2 && call.Name is "lower" or "upper" && call.Args.Count == 0)
 					{
-						bytecode.Emit(Op.TypeArray);
+						bytecode.Emit(Opcode.TypeArray);
 						Emit(call.Object);
-						if (NeedsStringConversion(call.Object)) bytecode.Emit(Op.ConvToString);
-						bytecode.Emit(Op.TypeVar);
+						if (NeedsStringConversion(call.Object)) bytecode.Emit(Opcode.ConvToString);
+						bytecode.Emit(Opcode.TypeVar);
 						bytecode.EmitDynamicStringIndex(bytecode.GetString(call.Name == "lower" ? "lowercase" : "uppercase"));
-						bytecode.Emit(Op.Call);
+						bytecode.Emit(Opcode.Call);
 						break;
 					}
 
 					if (call.Name == "size" && call.Args.Count == 0)
 					{
 						Emit(call.Object);
-						if (NeedsObjectConversion(call.Object) || call.Object is ArrayIndexExpr) bytecode.Emit(Op.ConvToObject);
-						bytecode.Emit(Op.ObjSize);
+						if (NeedsObjectConversion(call.Object) || call.Object is ArrayIndexExpr) bytecode.Emit(Opcode.ConvToObject);
+						bytecode.Emit(Opcode.ObjSize);
 						break;
 					}
 
 					if (call.Name == "type" && call.Args.Count == 0)
 					{
 						Emit(call.Object);
-						if (NeedsObjectConversion(call.Object)) bytecode.Emit(Op.ConvToObject);
-						bytecode.Emit(Op.ObjType);
+						if (NeedsObjectConversion(call.Object)) bytecode.Emit(Opcode.ConvToObject);
+						bytecode.Emit(Opcode.ObjType);
 						break;
 					}
 
 					if (call.Name == "indices" && call.Args.Count == 0)
 					{
 						Emit(call.Object);
-						bytecode.Emit(Op.ObjIndices);
+						bytecode.Emit(Opcode.ObjIndices);
 						break;
 					}
 
 					if (call.Name == "indices" && call.Args.Count == 1)
 					{
 						Emit(call.Object);
-						if (NeedsObjectConversion(call.Object)) bytecode.Emit(Op.ConvToObject);
+						if (NeedsObjectConversion(call.Object)) bytecode.Emit(Opcode.ConvToObject);
 						Emit(call.Args[0]);
-						bytecode.Emit(Op.ObjIndices);
+						bytecode.Emit(Opcode.ObjIndices);
 						break;
 					}
 
 					if (call.Name == "link" && call.Args.Count == 0)
 					{
 						Emit(call.Object);
-						if (grammar == ScriptGrammar.GS2 && NeedsObjectConversion(call.Object)) bytecode.Emit(Op.ConvToObject);
-						bytecode.Emit(Op.ObjLink);
+						if (grammar == ScriptGrammar.GS2 && NeedsObjectConversion(call.Object)) bytecode.Emit(Opcode.ConvToObject);
+						bytecode.Emit(Opcode.ObjLink);
 						break;
 					}
 
 					if (call.Name == "index")
 					{
 						Emit(call.Object);
-						if (NeedsObjectConversion(call.Object) || call.Object is ArrayIndexExpr) bytecode.Emit(Op.ConvToObject);
+						if (NeedsObjectConversion(call.Object) || call.Object is ArrayIndexExpr) bytecode.Emit(Opcode.ConvToObject);
 						foreach (var arg in call.Args) Emit(arg);
-						bytecode.Emit(Op.ObjIndex);
+						bytecode.Emit(Opcode.ObjIndex);
 						break;
 					}
 
@@ -2748,109 +2782,109 @@ internal static class GS2Compiler
 						}
 
 						Emit(call.Object);
-						bytecode.Emit(Op.ConvToString);
-						bytecode.Emit(Op.ObjLength);
+						bytecode.Emit(Opcode.ConvToString);
+						bytecode.Emit(Opcode.ObjLength);
 						break;
 					}
 
 					if (call.Name == "substring")
 					{
 						Emit(call.Object);
-						if (grammar == ScriptGrammar.GS1 || NeedsStringConversion(call.Object)) bytecode.Emit(Op.ConvToString);
+						if (grammar == ScriptGrammar.GS1 || NeedsStringConversion(call.Object)) bytecode.Emit(Opcode.ConvToString);
 						foreach (var arg in call.Args)
 						{
 							Emit(arg);
-							if (!IsNumberExpr(arg)) bytecode.Emit(Op.ConvToFloat);
+							if (!IsNumberExpr(arg)) bytecode.Emit(Opcode.ConvToFloat);
 						}
 
 						if (call.Args.Count == 1)
 						{
-							bytecode.Emit(Op.TypeNumber);
+							bytecode.Emit(Opcode.TypeNumber);
 							bytecode.EmitDynamicNumber(-1);
 						}
 
-						bytecode.Emit(Op.ObjSubstr);
+						bytecode.Emit(Opcode.ObjSubstr);
 						break;
 					}
 
 					if (call.Name == "pos")
 					{
 						Emit(call.Object);
-						bytecode.Emit(Op.ConvToString);
+						bytecode.Emit(Opcode.ConvToString);
 						foreach (var arg in call.Args)
 						{
 							Emit(arg);
-							if (NeedsStringConversion(arg)) bytecode.Emit(Op.ConvToString);
+							if (NeedsStringConversion(arg)) bytecode.Emit(Opcode.ConvToString);
 						}
 
-						bytecode.Emit(Op.ObjPos);
+						bytecode.Emit(Opcode.ObjPos);
 						break;
 					}
 
 					if (call.Name == "charat")
 					{
 						Emit(call.Object);
-						bytecode.Emit(Op.ConvToString);
+						bytecode.Emit(Opcode.ConvToString);
 						foreach (var arg in call.Args)
 						{
 							Emit(arg);
-							if (!IsNumberExpr(arg)) bytecode.Emit(Op.ConvToFloat);
+							if (!IsNumberExpr(arg)) bytecode.Emit(Opcode.ConvToFloat);
 						}
 
-						bytecode.Emit(Op.ObjCharAt);
+						bytecode.Emit(Opcode.ObjCharAt);
 						break;
 					}
 
 					if (call.Name is "starts" or "ends")
 					{
 						Emit(call.Object);
-						if (grammar == ScriptGrammar.GS2 || NeedsStringConversion(call.Object)) bytecode.Emit(Op.ConvToString);
+						if (grammar == ScriptGrammar.GS2 || NeedsStringConversion(call.Object)) bytecode.Emit(Opcode.ConvToString);
 						foreach (var arg in call.Args)
 						{
 							Emit(arg);
-							if (NeedsStringConversion(arg)) bytecode.Emit(Op.ConvToString);
+							if (NeedsStringConversion(arg)) bytecode.Emit(Opcode.ConvToString);
 						}
 
-						bytecode.Emit(call.Name == "starts" ? Op.ObjStarts : Op.ObjEnds);
+						bytecode.Emit(call.Name == "starts" ? Opcode.ObjStarts : Opcode.ObjEnds);
 						break;
 					}
 
 					if (call.Name == "trim" && call.Args.Count == 0)
 					{
 						Emit(call.Object);
-						if (NeedsStringConversion(call.Object)) bytecode.Emit(Op.ConvToString);
-						bytecode.Emit(Op.ObjTrim);
+						if (NeedsStringConversion(call.Object)) bytecode.Emit(Opcode.ConvToString);
+						bytecode.Emit(Opcode.ObjTrim);
 						break;
 					}
 
 					if (call.Name == "tokenize")
 					{
 						Emit(call.Object);
-						if (grammar == ScriptGrammar.GS2 || NeedsStringConversion(call.Object)) bytecode.Emit(Op.ConvToString);
+						if (grammar == ScriptGrammar.GS2 || NeedsStringConversion(call.Object)) bytecode.Emit(Opcode.ConvToString);
 						if (call.Args.Count == 0)
 						{
-							bytecode.Emit(Op.TypeString);
+							bytecode.Emit(Opcode.TypeString);
 							bytecode.EmitDynamicStringIndex(bytecode.GetString(" ,"));
 						}
 						else
 							foreach (var arg in call.Args)
 								Emit(arg);
 
-						bytecode.Emit(Op.ObjTokenize);
+						bytecode.Emit(Opcode.ObjTokenize);
 						break;
 					}
 
 					if (call.Name == "positions")
 					{
 						Emit(call.Object);
-						bytecode.Emit(Op.ConvToString);
+						bytecode.Emit(Opcode.ConvToString);
 						foreach (var arg in call.Args)
 						{
 							Emit(arg);
-							if (NeedsStringConversion(arg)) bytecode.Emit(Op.ConvToString);
+							if (NeedsStringConversion(arg)) bytecode.Emit(Opcode.ConvToString);
 						}
 
-						bytecode.Emit(Op.ObjPositions);
+						bytecode.Emit(Opcode.ObjPositions);
 						break;
 					}
 
@@ -2859,11 +2893,11 @@ internal static class GS2Compiler
 						if (grammar == ScriptGrammar.GS2)
 						{
 							Emit(call.Object);
-							if (NeedsObjectConversion(call.Object)) bytecode.Emit(Op.ConvToObject);
+							if (NeedsObjectConversion(call.Object)) bytecode.Emit(Opcode.ConvToObject);
 							foreach (var arg in call.Args)
 							{
 								Emit(arg);
-								if (NeedsNumericConversion(arg)) bytecode.Emit(Op.ConvToFloat);
+								if (NeedsNumericConversion(arg)) bytecode.Emit(Opcode.ConvToFloat);
 							}
 
 							if (call.Args.Count == 1) EmitNativeNumber(-1);
@@ -2874,91 +2908,91 @@ internal static class GS2Compiler
 							Emit(call.Object);
 						}
 
-						bytecode.Emit(Op.ObjSubarray);
+						bytecode.Emit(Opcode.ObjSubarray);
 						break;
 					}
 
 					if (call.Name == "clear" && call.Args.Count == 0)
 					{
 						Emit(call.Object);
-						if (NeedsObjectConversion(call.Object)) bytecode.Emit(Op.ConvToObject);
-						bytecode.Emit(Op.ObjClear);
+						if (NeedsObjectConversion(call.Object)) bytecode.Emit(Opcode.ConvToObject);
+						bytecode.Emit(Opcode.ObjClear);
 						break;
 					}
 
 					if (call.Name is "add" or "delete")
 					{
 						Emit(call.Object);
-						if (!(grammar == ScriptGrammar.GS1 && call.Object is DynamicVarExpr) && (NeedsObjectConversion(call.Object) || call.Object is ArrayIndexExpr)) bytecode.Emit(Op.ConvToObject);
+						if (!(grammar == ScriptGrammar.GS1 && call.Object is DynamicVarExpr) && (NeedsObjectConversion(call.Object) || call.Object is ArrayIndexExpr)) bytecode.Emit(Opcode.ConvToObject);
 						foreach (var arg in call.Args)
 						{
 							Emit(arg);
-							if (grammar == ScriptGrammar.GS2 && call.Name == "delete" && NeedsNumericConversion(arg)) bytecode.Emit(Op.ConvToFloat);
+							if (grammar == ScriptGrammar.GS2 && call.Name == "delete" && NeedsNumericConversion(arg)) bytecode.Emit(Opcode.ConvToFloat);
 						}
 
-						bytecode.Emit(call.Name == "add" ? Op.ObjAddString : Op.ObjDeleteString);
+						bytecode.Emit(call.Name == "add" ? Opcode.ObjAddString : Opcode.ObjDeleteString);
 						break;
 					}
 
 					if (call.Name is "insert" or "remove" or "replace")
 					{
 						Emit(call.Object);
-						if (!(grammar == ScriptGrammar.GS1 && call.Object is DynamicVarExpr) && NeedsObjectConversion(call.Object)) bytecode.Emit(Op.ConvToObject);
+						if (!(grammar == ScriptGrammar.GS1 && call.Object is DynamicVarExpr) && NeedsObjectConversion(call.Object)) bytecode.Emit(Opcode.ConvToObject);
 						for (var i = call.Args.Count - 1; i >= 0; --i) Emit(call.Args[i]);
-						if (grammar == ScriptGrammar.GS2 && call.Name is "insert" or "replace" && call.Args.Count > 0 && NeedsNumericConversion(call.Args[0])) bytecode.Emit(Op.ConvToFloat);
+						if (grammar == ScriptGrammar.GS2 && call.Name is "insert" or "replace" && call.Args.Count > 0 && NeedsNumericConversion(call.Args[0])) bytecode.Emit(Opcode.ConvToFloat);
 						bytecode.Emit(
 							call.Name switch
 							{
-								"insert" => Op.ObjInsertString,
-								"remove" => Op.ObjRemoveString,
-								_        => Op.ObjReplaceString,
+								"insert" => Opcode.ObjInsertString,
+								"remove" => Opcode.ObjRemoveString,
+								_        => Opcode.ObjReplaceString,
 							}
 						);
 						break;
 					}
 
-					bytecode.Emit(Op.TypeArray);
+					bytecode.Emit(Opcode.TypeArray);
 					for (var i = call.Args.Count - 1; i >= 0; --i) Emit(call.Args[i]);
 					Emit(new MemberExpr(call.Object, call.Name));
-					bytecode.Emit(Op.Call);
+					bytecode.Emit(Opcode.Call);
 					break;
 				case NewObjectExpr obj:
 					if (grammar == ScriptGrammar.GS1) bytecode.GetString(obj.TypeName);
 					if (obj.Args.Count == 1)
 					{
 						Emit(obj.Args[0]);
-						bytecode.Emit(Op.InlineNew);
+						bytecode.Emit(Opcode.InlineNew);
 					}
 					else
 					{
-						bytecode.Emit(Op.TypeVar);
+						bytecode.Emit(Opcode.TypeVar);
 						bytecode.EmitDynamicStringIndex(bytecode.GetString("unknown_object"));
 					}
 
-					bytecode.Emit(Op.TypeString);
+					bytecode.Emit(Opcode.TypeString);
 					bytecode.EmitDynamicStringIndex(bytecode.GetString(obj.TypeName));
-					bytecode.Emit(Op.NewObject);
+					bytecode.Emit(Opcode.NewObject);
 					break;
 				case NewArrayExpr array:
 					for (var i = 0; i < array.Dimensions.Count; ++i)
 					{
 						Emit(array.Dimensions[i]);
-						bytecode.Emit(i == 0 ? Op.ArrayNew : Op.ArrayNewMultiDim);
+						bytecode.Emit(i == 0 ? Opcode.ArrayNew : Opcode.ArrayNewMultiDim);
 					}
 
 					break;
 				case LambdaExpr lambda:
 					EmitFunction(new(lambda.Name, null, true, lambda.Args, lambda.Body), true);
-					bytecode.Emit(Op.This);
-					bytecode.Emit(Op.TypeVar);
+					bytecode.Emit(Opcode.This);
+					bytecode.Emit(Opcode.TypeVar);
 					bytecode.EmitDynamicStringIndex(bytecode.GetString(lambda.Name));
-					bytecode.Emit(Op.MemberAccess);
-					bytecode.Emit(Op.ConvToObject);
+					bytecode.Emit(Opcode.MemberAccess);
+					bytecode.Emit(Opcode.ConvToObject);
 					break;
 				case ArrayLiteralExpr array:
-					bytecode.Emit(Op.TypeArray);
+					bytecode.Emit(Opcode.TypeArray);
 					for (var i = array.Values.Count - 1; i >= 0; --i) Emit(array.Values[i]);
-					bytecode.Emit(Op.ArrayEnd);
+					bytecode.Emit(Opcode.ArrayEnd);
 					break;
 			}
 		}
@@ -2966,22 +3000,22 @@ internal static class GS2Compiler
 		private void EmitArrayIndex(ArrayIndexExpr expr, bool assignmentTarget)
 		{
 			Emit(expr.Target);
-			if (grammar == ScriptGrammar.GS2 || expr.Target is not ArrayIndexExpr) bytecode.Emit(Op.ConvToObject);
+			if (grammar == ScriptGrammar.GS2 || expr.Target is not ArrayIndexExpr) bytecode.Emit(Opcode.ConvToObject);
 			Emit(expr.Index);
-			if (!IsNumberExpr(expr.Index)) bytecode.Emit(Op.ConvToFloat);
-			if (!assignmentTarget) bytecode.Emit(Op.Array);
+			if (!IsNumberExpr(expr.Index)) bytecode.Emit(Opcode.ConvToFloat);
+			if (!assignmentTarget) bytecode.Emit(Opcode.Array);
 		}
 
 		private void EmitTernary(TernaryExpr ternary, int? chainedSuccessLoc = null)
 		{
 			Emit(ternary.Condition, grammar == ScriptGrammar.GS1 && ternary.Condition is BinaryExpr { Op: "=" }, false, 0);
-			if (!IsBooleanExpr(ternary.Condition)) bytecode.Emit(Op.ConvToFloat);
+			if (!IsBooleanExpr(ternary.Condition)) bytecode.Emit(Opcode.ConvToFloat);
 			if (chainedSuccessLoc.HasValue) bytecode.PatchShort(chainedSuccessLoc.Value, bytecode.OpIndex);
-			bytecode.Emit(Op.If);
+			bytecode.Emit(Opcode.If);
 			var failLoc = bytecode.EmitNumberOperandPlaceholder();
 			Emit(ternary.WhenTrue, grammar == ScriptGrammar.GS2 && ternary.WhenTrue is BinaryExpr { Op: "=" }, true, 0);
 			bytecode.PatchShort(failLoc, bytecode.OpIndex + 1);
-			bytecode.Emit(Op.SetIndex);
+			bytecode.Emit(Opcode.Jmp);
 			var successLoc = bytecode.EmitNumberOperandPlaceholder();
 			if (grammar == ScriptGrammar.GS1 && ternary.WhenFalse is TernaryExpr nested) EmitTernary(nested, successLoc);
 			else
@@ -2999,14 +3033,14 @@ internal static class GS2Compiler
 			for (var i = 0; i < terms.Count - 1; ++i)
 			{
 				Emit(terms[i], grammar == ScriptGrammar.GS1 && terms[i] is BinaryExpr { Op: "=" }, false, 0);
-				if (!IsBooleanExpr(terms[i]) && (grammar != ScriptGrammar.GS1 || NeedsNumericConversion(terms[i]) || terms[i] is BinaryExpr { Op: "=" })) bytecode.Emit(Op.ConvToFloat);
-				bytecode.Emit(logical.Op == "&&" ? Op.And : Op.Or);
+				if (!IsBooleanExpr(terms[i]) && (grammar != ScriptGrammar.GS1 || NeedsNumericConversion(terms[i]) || terms[i] is BinaryExpr { Op: "=" })) bytecode.Emit(Opcode.ConvToFloat);
+				bytecode.Emit(logical.Op == "&&" ? Opcode.And : Opcode.Or);
 				patches.Add(bytecode.EmitNumberOperandPlaceholder());
 			}
 
 			Emit(terms[^1], grammar == ScriptGrammar.GS1 && terms[^1] is BinaryExpr { Op: "=" }, false, 0);
-			if (!IsBooleanExpr(terms[^1]) && (grammar != ScriptGrammar.GS1 || NeedsNumericConversion(terms[^1]) || terms[^1] is BinaryExpr { Op: "=" })) bytecode.Emit(Op.ConvToFloat);
-			if (logicalInline) bytecode.Emit(Op.InlineConditional);
+			if (!IsBooleanExpr(terms[^1]) && (grammar != ScriptGrammar.GS1 || NeedsNumericConversion(terms[^1]) || terms[^1] is BinaryExpr { Op: "=" })) bytecode.Emit(Opcode.ConvToFloat);
+			if (logicalInline) bytecode.Emit(Opcode.InlineConditional);
 			var target = bytecode.OpIndex - (logicalInline ? 1 : 0) + (!logicalInline ? suppressedLogicalPatchOffset : 0);
 			foreach (var patch in patches) bytecode.PatchShort(patch, target);
 		}
@@ -3026,36 +3060,36 @@ internal static class GS2Compiler
 		private void EmitMultiArrayIndex(MultiArrayIndexExpr expr, bool assignmentTarget)
 		{
 			Emit(expr.Target);
-			bytecode.Emit(Op.ConvToObject);
+			bytecode.Emit(Opcode.ConvToObject);
 			foreach (var index in expr.Indices)
 			{
 				Emit(index);
-				if (!IsNumberExpr(index)) bytecode.Emit(Op.ConvToFloat);
+				if (!IsNumberExpr(index)) bytecode.Emit(Opcode.ConvToFloat);
 			}
 
-			if (!assignmentTarget) bytecode.Emit(Op.ArrayMultiDim);
+			if (!assignmentTarget) bytecode.Emit(Opcode.ArrayMultiDim);
 		}
 
 		private static bool IsCompoundAssign(string op) => op is "+=" or "-=" or "*=" or "/=" or "^=" or "%=" or "@=" or "<<=" or ">>=";
 
-		private static readonly Dictionary<string, Op> BuiltInCalls = new(StringComparer.Ordinal)
+		private static readonly Dictionary<string, Opcode> BuiltInCalls = new(StringComparer.Ordinal)
 		{
-			["sin"]    = Op.Sin,
-			["char"]   = Op.Char,
-			["cos"]    = Op.Cos,
-			["arctan"] = Op.Arctan,
-			["vecx"]   = Op.Vecx,
-			["vecy"]   = Op.Vecy,
-			["abs"]    = Op.Abs,
-			["int"]    = Op.Int,
-			["exp"]    = Op.Exp,
-			["log"]    = Op.Log,
-			["random"] = Op.Random,
-			["min"]    = Op.Min,
-			["max"]    = Op.Max,
+			["sin"]    = Opcode.Sin,
+			["char"]   = Opcode.Char,
+			["cos"]    = Opcode.Cos,
+			["arctan"] = Opcode.Arctan,
+			["vecx"]   = Opcode.Vecx,
+			["vecy"]   = Opcode.Vecy,
+			["abs"]    = Opcode.Abs,
+			["int"]    = Opcode.Int,
+			["exp"]    = Opcode.Exp,
+			["log"]    = Opcode.Log,
+			["random"] = Opcode.Random,
+			["min"]    = Opcode.Min,
+			["max"]    = Opcode.Max,
 		};
 
-		private static readonly Dictionary<string, Op> NonReversedBuiltInCalls = new(StringComparer.Ordinal) { ["pow"] = Op.Pow, ["getangle"] = Op.GetAngle, ["getdir"] = Op.GetDir };
+		private static readonly Dictionary<string, Opcode> NonReversedBuiltInCalls = new(StringComparer.Ordinal) { ["pow"] = Opcode.Pow, ["getangle"] = Opcode.GetAngle, ["getdir"] = Opcode.GetDir };
 
 		private static readonly HashSet<string> NonReturningBuiltInCalls = new(StringComparer.Ordinal) { "sleep", "setarray" };
 
@@ -3081,7 +3115,7 @@ internal static class GS2Compiler
 		[System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
 		private void EmitNativeNumber(double value)
 		{
-			bytecode.Emit(Op.TypeNumber);
+			bytecode.Emit(Opcode.TypeNumber);
 			var nearest = Math.Round(value);
 			if (nearest >= int.MinValue && nearest <= int.MaxValue && Math.Abs(value - nearest) <= 0.0001)
 			{
@@ -3113,10 +3147,10 @@ internal static class GS2Compiler
 		[System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
 		private void EmitMemberOwner(Expr expr, bool dynamic = false)
 		{
-			if (expr is IdentifierExpr { Name: "this" } && (!dynamic || grammar == ScriptGrammar.GS1)) bytecode.Emit(Op.This);
-			else if (expr is IdentifierExpr { Name: "temp" }) bytecode.Emit(Op.Temp);
-			else if (expr is IdentifierExpr { Name: "thiso" }) bytecode.Emit(Op.Thiso);
-			else if (expr is IdentifierExpr { Name: "playero" }) bytecode.Emit(Op.Playero);
+			if (expr is IdentifierExpr { Name: "this" } && (!dynamic || grammar == ScriptGrammar.GS1)) bytecode.Emit(Opcode.This);
+			else if (expr is IdentifierExpr { Name: "temp" }) bytecode.Emit(Opcode.Temp);
+			else if (expr is IdentifierExpr { Name: "thiso" }) bytecode.Emit(Opcode.Thiso);
+			else if (expr is IdentifierExpr { Name: "playero" }) bytecode.Emit(Opcode.Playero);
 			else Emit(expr);
 		}
 
@@ -3388,38 +3422,38 @@ internal static class GS2Compiler
 				_                                                                                      => false,
 			};
 
-		private static Op BinaryOpcode(string op) =>
+		private static Opcode BinaryOpcode(string op) =>
 			op switch
 			{
-				"+"          => Op.Add,
-				"-"          => Op.Sub,
-				"*"          => Op.Mul,
-				"/"          => Op.Div,
-				"%"          => Op.Mod,
-				"^"          => Op.Pow,
-				"@"          => Op.Join,
-				"=="         => Op.Eq,
-				"!="         => Op.Neq,
-				"<"          => Op.Lt,
-				"<=" or "=<" => Op.Lte,
-				">"          => Op.Gt,
-				">=" or "=>" => Op.Gte,
-				"&"          => Op.BitAnd,
-				"|"          => Op.BitOr,
-				"xor"        => Op.BitXor,
-				"<<"         => Op.ShiftLeft,
-				">>"         => Op.ShiftRight,
-				"&&"         => Op.And,
-				"||"         => Op.Or,
-				_            => Op.None,
+				"+"          => Opcode.Add,
+				"-"          => Opcode.Sub,
+				"*"          => Opcode.Mul,
+				"/"          => Opcode.Div,
+				"%"          => Opcode.Mod,
+				"^"          => Opcode.Pow,
+				"@"          => Opcode.Join,
+				"=="         => Opcode.Eq,
+				"!="         => Opcode.Neq,
+				"<"          => Opcode.Lt,
+				"<=" or "=<" => Opcode.Lte,
+				">"          => Opcode.Gt,
+				">=" or "=>" => Opcode.Gte,
+				"&"          => Opcode.BitAnd,
+				"|"          => Opcode.BitOr,
+				"xor"        => Opcode.BitXor,
+				"<<"         => Opcode.ShiftLeft,
+				">>"         => Opcode.ShiftRight,
+				"&&"         => Opcode.And,
+				"||"         => Opcode.Or,
+				_            => Opcode.NoOp,
 			};
 
-		private static Op CompoundOpcode(string op) =>
+		private static Opcode CompoundOpcode(string op) =>
 			op switch
 			{
-				"<<=" => Op.ShiftLeft,
-				">>=" => Op.ShiftRight,
-				"^="  => Op.Pow,
+				"<<=" => Opcode.ShiftLeft,
+				">>=" => Opcode.ShiftRight,
+				"^="  => Opcode.Pow,
 				_     => BinaryOpcode(op[0].ToString()),
 			};
 	}
@@ -3434,7 +3468,6 @@ internal static class GS2Compiler
 		private readonly List<FunctionEntry>     _functions      = [];
 		private readonly HashSet<string>         _functionSet    = new(StringComparer.Ordinal);
 		private readonly List<int>               _prejumpPatches = [];
-		private          Op                      _lastOp         = Op.None;
 		public           int                     OpIndex { get; private set; }
 
 		public BytecodeWriter(int gs1EventFlags, ScriptGrammar grammar)
@@ -3467,25 +3500,37 @@ internal static class GS2Compiler
 			_prejumpPatches.Clear();
 		}
 
-		public void Emit(Op op)
+		/// <summary>
+		/// Official model for the shared end-of-code epilogue: the last pending function
+		/// prejump targets <paramref name="epiloguePos"/> (the epilogue itself); all earlier
+		/// pending prejumps target end-of-code (past the epilogue).
+		/// </summary>
+		public void PatchPrejumpsLastTo(int epiloguePos)
+		{
+			if (_prejumpPatches.Count > 0)
+			{
+				var last = _prejumpPatches[^1];
+				_prejumpPatches.RemoveAt(_prejumpPatches.Count - 1);
+				PatchShort(last, epiloguePos);
+			}
+			PatchPrejumps();
+		}
+
+		public void Emit(Opcode op)
 		{
 			_code.Add((byte)op);
-			_lastOp = op;
 			OpIndex++;
 		}
 
 		public void EmitNumberOperand(int value)
 		{
-			_code.Add(0xF4);
-			WriteShort(_code, value);
+			_code.AddRange(ImmediateOperandCodec.Official.EncodeNumberOperand(value));
 		}
 
 		public int EmitNumberOperandPlaceholder()
 		{
-			_code.Add(0xF4);
-			var pos = _code.Count;
-			WriteShort(_code, 0);
-			return pos;
+			_code.AddRange(ImmediateOperandCodec.Official.EncodeNumberOperand(0));
+			return _code.Count - 2;
 		}
 
 		public void PatchShort(int pos, int value)
@@ -3496,47 +3541,17 @@ internal static class GS2Compiler
 
 		public void EmitDynamicStringIndex(int value)
 		{
-			if (value <= byte.MaxValue)
-			{
-				_code.Add(0xF0);
-				_code.Add((byte)value);
-			}
-			else if (value <= ushort.MaxValue)
-			{
-				_code.Add(0xF1);
-				WriteShort(_code, value);
-			}
-			else
-			{
-				_code.Add(0xF2);
-				WriteInt(_code, value);
-			}
+			_code.AddRange(ImmediateOperandCodec.Official.EncodeStringIndex(value));
 		}
 
 		public void EmitDynamicNumber(int value)
 		{
-			var offset = _lastOp == Op.TypeNumber || _lastOp == Op.SetIndex || _lastOp == Op.SetIndexTrue ? 3 : 0;
-			if (value >= sbyte.MinValue && value <= sbyte.MaxValue)
-			{
-				_code.Add((byte)(0xF0 + offset));
-				_code.Add(unchecked((byte)(sbyte)value));
-			}
-			else if (value >= short.MinValue && value <= short.MaxValue)
-			{
-				_code.Add((byte)(0xF1 + offset));
-				WriteShort(_code, value);
-			}
-			else
-			{
-				_code.Add((byte)(0xF2 + offset));
-				WriteInt(_code, value);
-			}
+			_code.AddRange(ImmediateOperandCodec.Official.EncodeNumber(value));
 		}
 
 		public void EmitDoubleNumber(string value)
 		{
-			_code.Add(0xF6);
-			WriteCString(_code, value);
+			_code.AddRange(ImmediateOperandCodec.Official.EncodeFloat(value));
 		}
 
 		public byte[] ToArray()
@@ -3569,17 +3584,17 @@ internal static class GS2Compiler
 			var byOpIndex    = instructions.ToDictionary(instruction => instruction.OpIndex);
 			foreach (var instruction in instructions.OrderByDescending(instruction => instruction.Offset))
 			{
-				if (!(IsTargetInstruction(instruction.Op) || instruction.Op == Op.SetIndex) || instruction.OperandOffset == null || instruction.OperandValue == null) continue;
-				var target = ResolveSetIndexTarget(instruction.OperandValue.Value, byOpIndex, _grammar == ScriptGrammar.GS1 ? instruction.Op : Op.None);
+				if (!(IsTargetInstruction(instruction.Op) || instruction.Op == Opcode.Jmp) || instruction.OperandOffset == null || instruction.OperandValue == null) continue;
+				var target = ResolveSetIndexTarget(instruction.OperandValue.Value, byOpIndex, _grammar == ScriptGrammar.GS1 ? instruction.Op : Opcode.NoOp);
 				if (target == instruction.OperandValue.Value) continue;
 				WriteDynamicNumber(instruction.OperandOffset.Value, target);
 			}
 		}
 
-		private static int ResolveSetIndexTarget(int target, Dictionary<int, Instruction> instructions, Op sourceOp)
+		private static int ResolveSetIndexTarget(int target, Dictionary<int, Instruction> instructions, Opcode sourceOp)
 		{
 			HashSet<int> visited = [];
-			while (visited.Add(target) && instructions.TryGetValue(target, out var instruction) && instruction.OperandValue is { } nextTarget && (instruction.Op == Op.SetIndex || sourceOp == Op.Or && instruction.Op == Op.Or))
+			while (visited.Add(target) && instructions.TryGetValue(target, out var instruction) && instruction.OperandValue is { } nextTarget && (instruction.Op == Opcode.Jmp || sourceOp == Opcode.Or && instruction.Op == Opcode.Or))
 			{
 				target = nextTarget;
 			}
@@ -3595,7 +3610,7 @@ internal static class GS2Compiler
 			while (offset < _code.Count)
 			{
 				var  instructionOffset = offset;
-				var  op                = (Op)_code[offset++];
+				var  op                = (Opcode)_code[offset++];
 				int? operandOffset     = null;
 				int? operandValue      = null;
 				if (HasDynamicOperand(op) && offset < _code.Count)
@@ -3648,9 +3663,9 @@ internal static class GS2Compiler
 			PatchShort(offset + 1, value);
 		}
 
-		private bool HasDynamicOperand(Op op) => op is Op.SetIndex or Op.SetIndexTrue or Op.Or or Op.If or Op.And or Op.TypeNumber or Op.TypeString or Op.TypeVar or Op.StoreRegister or Op.LoadRegister or Op.InRange or Op.With or Op.Foreach;
+		private bool HasDynamicOperand(Opcode op) => op is Opcode.Jmp or Opcode.SetIndexTrue or Opcode.Or or Opcode.If or Opcode.And or Opcode.TypeNumber or Opcode.TypeString or Opcode.TypeVar or Opcode.StoreRegister or Opcode.LoadRegister or Opcode.InRange or Opcode.With or Opcode.Foreach;
 
-		private static bool IsTargetInstruction(Op op) => op is Op.SetIndexTrue or Op.Or or Op.If or Op.And;
+		private static bool IsTargetInstruction(Opcode op) => op is Opcode.SetIndexTrue or Opcode.Or or Opcode.If or Opcode.And;
 
 		private void MinimizeDynamicNumbers()
 		{
@@ -3711,14 +3726,8 @@ internal static class GS2Compiler
 
 		private static void WriteCString(List<byte> target, string value)
 		{
-			target.AddRange(Encoding.UTF8.GetBytes(value));
-			target.Add(0);
-		}
-
-		private static void WriteShort(List<byte> target, int value)
-		{
-			target.Add((byte)((value >> 8) & 0xFF));
-			target.Add((byte)(value & 0xFF));
+			// Official language mode: Latin-1 with '?' substitution, matching the official toolchain.
+			target.AddRange(Gs2StringCodec.Official.EncodeCString(value));
 		}
 
 		private static void WriteInt(List<byte> target, int value)
@@ -3742,7 +3751,7 @@ internal static class GS2Compiler
 		}
 	}
 
-	private sealed record Instruction(int OpIndex, int Offset, Op Op, int? OperandOffset, int? OperandValue);
+	private sealed record Instruction(int OpIndex, int Offset, Opcode Op, int? OperandOffset, int? OperandValue);
 
 	private sealed record FunctionEntry(string Name, string HashName, bool Qualified, int OpIndex, int JmpLoc);
 
@@ -3755,125 +3764,4 @@ internal static class GS2Compiler
 		Object,
 	}
 
-	private enum Op : byte
-	{
-		None                = 0,
-		SetIndex            = 1,
-		SetIndexTrue        = 2,
-		Or                  = 3,
-		If                  = 4,
-		And                 = 5,
-		Call                = 6,
-		Sleep               = 8,
-		CmdCall             = 9,
-		Jmp                 = 10,
-		WaitFor             = 11,
-		TypeNumber          = 20,
-		TypeString          = 21,
-		TypeVar             = 22,
-		TypeArray           = 23,
-		TypeTrue            = 24,
-		TypeFalse           = 25,
-		TypeNull            = 26,
-		Pi                  = 27,
-		SwapLastOps         = 31,
-		IndexDec            = 32,
-		ConvToFloat         = 33,
-		ConvToString        = 34,
-		MemberAccess        = 35,
-		ConvToObject        = 36,
-		ArrayEnd            = 37,
-		ArrayNew            = 38,
-		SetArray            = 39,
-		InlineNew           = 40,
-		MakeVar             = 41,
-		NewObject           = 42,
-		ObjFromString       = 43,
-		StoreRegister       = 45,
-		LoadRegister        = 46,
-		ResolveVar          = 47,
-		Assign              = 50,
-		FuncParamsEnd       = 51,
-		Inc                 = 52,
-		Dec                 = 53,
-		CopyLastOp          = 30,
-		Add                 = 60,
-		Sub                 = 61,
-		Mul                 = 62,
-		Div                 = 63,
-		Mod                 = 64,
-		Pow                 = 65,
-		Not                 = 68,
-		UnarySub            = 69,
-		Eq                  = 70,
-		Neq                 = 71,
-		Lt                  = 72,
-		Gt                  = 73,
-		Lte                 = 74,
-		Gte                 = 75,
-		BitOr               = 76,
-		BitAnd              = 77,
-		BitXor              = 78,
-		BitInvert           = 79,
-		InRange             = 80,
-		InObj               = 81,
-		ObjIndex            = 82,
-		ObjType             = 83,
-		Format              = 84,
-		Abs                 = 86,
-		Int                 = 85,
-		Random              = 87,
-		Sin                 = 88,
-		Cos                 = 89,
-		Arctan              = 90,
-		Exp                 = 91,
-		Log                 = 92,
-		Min                 = 93,
-		Max                 = 94,
-		GetAngle            = 95,
-		GetDir              = 96,
-		Vecx                = 97,
-		Vecy                = 98,
-		ObjIndices          = 99,
-		ObjLink             = 100,
-		ShiftLeft           = 101,
-		ShiftRight          = 102,
-		Char                = 103,
-		ObjTrim             = 110,
-		ObjLength           = 111,
-		ObjPos              = 112,
-		Join                = 113,
-		ObjCharAt           = 114,
-		ObjSubstr           = 115,
-		ObjStarts           = 116,
-		ObjEnds             = 117,
-		ObjTokenize         = 118,
-		Translate           = 119,
-		ObjPositions        = 120,
-		ObjSize             = 130,
-		Array               = 131,
-		ArrayAssign         = 132,
-		ArrayMultiDim       = 133,
-		ArrayMultiDimAssign = 134,
-		ObjSubarray         = 135,
-		ObjAddString        = 136,
-		ObjDeleteString     = 137,
-		ObjRemoveString     = 138,
-		ObjReplaceString    = 139,
-		ObjInsertString     = 140,
-		ObjClear            = 141,
-		ArrayNewMultiDim    = 142,
-		With                = 150,
-		WithEnd             = 151,
-		Foreach             = 163,
-		InlineConditional   = 44,
-		Ret                 = 7,
-		This                = 180,
-		Thiso               = 181,
-		Player              = 182,
-		Playero             = 183,
-		Level               = 184,
-		Temp                = 189,
-		Params              = 190,
-	}
 }

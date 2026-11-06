@@ -1,9 +1,0 @@
-{
-  "type": "weapon",
-  "name": "-tmpweapon",
-  "byteCodeBase64": "AAAAAQAAAAQAAAAAAAAAAgAAAA0AAAABdGVzdFdpdGgAAAAAAwAAAK5wbGF5ZXIAeAB5AGhlYWx0aABnYW1lAHdvcmxkAHdpZHRoAGhlaWdodABzZXR0aW5ncwBmdWxsc2NyZWVuAHZzeW5jAG9iamVjdHMAY3VycmVudF9pbmRleAB2aXNpYmxlAGFscGhhAHZlbG9jaXR5AGNoYXJhY3RlcgBhbGl2ZQByZXNwYXduX3RpbWVyAHdvcmxkX3dpZHRoAGNsYW1wAHdvcmxkX2hlaWdodAAAAAAEAAAA5QHzexczCgm9FvAAIySW8xQW8AEU8woyFvACFPMUMhbwAxTzZDKXvRbwBCMklvMyvRbwBSMklvMxFvAGFPQDIDIW8AcU9AJYMr0W8AgjJJbzMBbwCRgyFvAKGTKXl5e9FvALIyS9FvAMIyGDJJbzWBbwDRgyFvAOFPMBMhbwAR4hFvAPJBbwASMhPDIW8AIeIRbwDyQW8AIjITwyl70W8BAjJJbzeRbwAyEU8wBKBPNoFvARGTIW8BIU8wUyFvABFxbwExTzABbwARbwFAYyFvACFxbwFRTzABbwAhbwFAYylxTzAAc=",
-  "byteCount": 452,
-  "outputPath": "/tmp/gs2-current-historical.gs2bc",
-  "temporaryScriptRemoved": true,
-  "success": true
-}

@@ -143,7 +143,7 @@ public class Gs2FeatureParityTests
 	}
 
 	[Fact]
-	public void Given_unicode_string_fixture_When_compiling_Then_unicode_is_preserved()
+	public void Given_unicode_string_fixture_When_compiling_Then_unicode_matches_official_substitution()
 	{
 		var          path           = Path.Combine(BaselineTests.FindRepoRoot(), "tests", "scripts", "edge_cases", "02_long_strings.gs2");
 		var          source         = File.ReadAllText(path);
@@ -156,7 +156,20 @@ public class Gs2FeatureParityTests
 
 		Assert.True(result.Success, result.ErrMsg);
 		var strings = Encoding.UTF8.GetString(ReadSegments(result.ByteCode)[3]).Split('\0');
-		Assert.Contains(unicode, strings);
+		// Official language mode: non-Latin-1 characters become ?, matching the official toolchain.
+		Assert.Contains("Unicode: ????? ????? ?? ??? ???", strings);
+	}
+
+	[Fact]
+	public void Given_enum_member_reference_When_compiling_Then_emits_type_var_like_official()
+	{
+		const string source = "enum State { IDLE, WALKING };\nfunction test() {\n  temp.currentState = State::IDLE;\n}\n";
+		var          result = Interface.CompileCode(source, withHeader: false, grammar: ScriptGrammar.GS2);
+
+		Assert.True(result.Success, result.ErrMsg);
+		var strings = Encoding.UTF8.GetString(ReadSegments(result.ByteCode)[3]).Split('\0');
+		// Official behavior: Enum::Member is a runtime variable reference, never constant-folded.
+		Assert.Contains("State::IDLE", strings);
 	}
 
 	[Fact]
@@ -181,25 +194,86 @@ public class Gs2FeatureParityTests
 
 		var original = Interface.CompileCode(source, withHeader: false, grammar: ScriptGrammar.GS2);
 		Assert.True(original.Success, original.ErrMsg);
-		var segments = ReadSegments(original.ByteCode);
-		var strings  = Encoding.UTF8.GetString(segments[3]).Split('\0');
-		Assert.Equal("movement-functions", strings[0]);
-		Assert.Equal("join", strings[1]);
-		Assert.Equal(
-			new byte[]
+		// Official: a bare top-level join("literal"); is a compile-time class-join directive
+		// and emits no code, so the source with the attachment compiles to the same bytes.
+		Assert.Equal(expected, original.ByteCode);
+	}
+
+	[Fact]
+	public void Given_bare_top_level_join_When_compiling_Then_emits_no_code()
+	{
+		const string source = "join(\"some-class\");\n";
+		var          result = Interface.CompileCode(source, withHeader: false, grammar: ScriptGrammar.GS2);
+
+		Assert.True(result.Success, result.ErrMsg);
+		Assert.Empty(ReadSegments(result.ByteCode)[4]);
+	}
+
+	[Fact]
+	public void Given_join_inside_function_When_compiling_Then_emits_runtime_call()
+	{
+		const string source = "function onCreated() {\n  join(\"some-class\");\n}\n";
+		var          result = Interface.CompileCode(source, withHeader: false, grammar: ScriptGrammar.GS2);
+
+		Assert.True(result.Success, result.ErrMsg);
+		var strings = Encoding.UTF8.GetString(ReadSegments(result.ByteCode)[3]).Split('\0');
+		Assert.Contains("join", strings);
+		Assert.Contains("some-class", strings);
+	}
+
+	[Fact]
+	public void Given_join_under_top_level_conditional_When_compiling_Then_emits_runtime_call()
+	{
+		const string source = "if (playerenters) join(\"some-class\");\n";
+		var          result = Interface.CompileCode(source, withHeader: false, grammar: ScriptGrammar.GS2);
+
+		Assert.True(result.Success, result.ErrMsg);
+		var strings = Encoding.UTF8.GetString(ReadSegments(result.ByteCode)[3]).Split('\0');
+		Assert.Contains("join", strings);
+		Assert.Contains("some-class", strings);
+	}
+
+	[Fact]
+	public void Given_bare_function_declaration_When_compiling_Then_emits_minimal_stub_with_shared_epilogue()
+	{
+		// Official: `function foo()` with no body and no semicolon gets a minimal stub
+		// (no synthesized `return 0`); a single shared `0; return;` epilogue terminates
+		// the code segment, targeted by the last function's prejump.
+		const string source = "function bare()\nfunction after() {\n  return 1;\n}\n";
+		var          result = Interface.CompileCode(source, withHeader: false, grammar: ScriptGrammar.GS2);
+
+		Assert.True(result.Success, result.ErrMsg);
+		var code = ReadSegments(result.ByteCode)[4];
+		// The shared epilogue terminates the code segment.
+		Assert.Equal(new byte[] { 20, 0xF3, 0, 7 }, code[^4..]);
+		// The bare function has no inline `return 0`: the only TYPENUM #0, RET in the
+		// code is the epilogue (after() returns 1, so its body holds TYPENUM #1).
+		var returnsZero = 0;
+		for (var i = 0; i + 4 <= code.Length; i++)
+			if (code[i] == 20 && code[i + 1] == 0xF3 && code[i + 2] == 0 && code[i + 3] == 7)
+				returnsZero++;
+		Assert.Equal(1, returnsZero);
+	}
+
+	[Fact]
+	public void Given_semicolon_function_declaration_When_compiling_Then_synthesizes_inline_return()
+	{
+		// `function foo();` (with semicolon) is not a bare declaration: official synthesizes
+		// the `return 0` inline and emits no shared epilogue.
+		const string source = "function empty();\nfunction after() {\n  return 1;\n}\n";
+		var          result = Interface.CompileCode(source, withHeader: false, grammar: ScriptGrammar.GS2);
+
+		Assert.True(result.Success, result.ErrMsg);
+		var code = ReadSegments(result.ByteCode)[4];
+		// empty()'s inline `return 0` appears before after()'s body (not just at the end).
+		var firstZeroReturn = -1;
+		for (var i = 0; i + 4 <= code.Length; i++)
+			if (code[i] == 20 && code[i + 1] == 0xF3 && code[i + 2] == 0 && code[i + 3] == 7)
 			{
-				23,
-				21,
-				0xF0,
-				0,
-				22,
-				0xF0,
-				1,
-				6,
-				32,
-			},
-			segments[4][..9]
-		);
+				firstZeroReturn = i;
+				break;
+			}
+		Assert.InRange(firstZeroReturn, 0, code.Length - 4 - 4);
 	}
 
 	[Theory]
