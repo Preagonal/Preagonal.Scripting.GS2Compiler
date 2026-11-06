@@ -17,7 +17,7 @@ The public API is centered on `Interface.CompileCode(string? code, string? type 
 
 The response also contains `JoinedClasses`, the unique, sorted class names from literal `join("class")` calls. Failed compilations return an empty collection.
 
-The NativeAOT project publishes `gs2compiler` and its public `include/` headers. C++ callers can include `<compiler/GS2Context.h>` and use the reference API:
+The NativeAOT project publishes `gs2compiler` and its public `include/` headers. C++ callers can include `<compiler/GS2Context.h>` and use the reference compilation API used by gserver:
 
 ```cpp
 GS2Context context;
@@ -30,7 +30,7 @@ if (response.success)
 }
 ```
 
-These inline bindings call the C# native exports and copy the results into the reference C++ response types. Responses own their buffers and remain valid across further compilations and context destruction. The header-producing C++ overloads retain the reference `saveToDisk` argument and header generation.
+These inline bindings call the C# native exports and copy the results into the reference C++ response types. Responses own their buffers and remain valid across further compilations and context destruction. The C++ binding exposes the headerless compilation path used by gserver.
 
 For direct C ABI calls, `<GS2Compiler.h>` declares the exports (inside `gs2compiler_native` for C++). `JoinedClasses` is an array of UTF-8 string pointers with `JoinedClassesCount` entries. Release every returned response with `free_response(&response)`; this frees the error text, bytecode, and class strings and clears the response. Release contexts with `delete_context`.
 

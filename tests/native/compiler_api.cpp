@@ -14,13 +14,6 @@ int main()
     auto next = context.compile("echo(\"next\");");
     assert(next.success && next.joinedClasses.empty());
     assert(result.joinedClasses.size() == 3 && result.bytecode.length());
-    auto header = GS2Context::CreateHeader(result.bytecode, "weapon", "test", true);
-    assert(header.length() == result.bytecode.length() + 26);
-    assert(std::memcmp(header.buffer() + 2, "weapon,test,1,", 14) == 0);
-    assert(std::memcmp(header.buffer() + 26, result.bytecode.buffer(), result.bytecode.length()) == 0);
-    auto wrapped = GS2Context::Compile("join(\"wrapped\");", "npc", "test", false);
-    assert(wrapped.success && wrapped.joinedClasses.contains("wrapped"));
-    assert(std::memcmp(wrapped.bytecode.buffer() + 2, "npc,test,0,", 11) == 0);
     for (int i = 0; i < 100; ++i)
     {
         auto raw = gs2compiler_native::compile_code_no_header(nullptr, "join(\"native\");");
