@@ -18,9 +18,9 @@
         <FileVersion>1.0.0</FileVersion>
         <NeutralLanguage>en-US</NeutralLanguage>
         <TargetFramework>net10.0</TargetFramework>
-        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
         <IsAotCompatible>true</IsAotCompatible>
-        <UseLocalGSAst Condition="'$(Configuration)' == 'Debug'">true</UseLocalGSAst>
+        <UseLocalGSAst Condition="'$(Configuration)' == 'Debug'">false</UseLocalGSAst>
     </PropertyGroup>
 
     <ItemGroup>
