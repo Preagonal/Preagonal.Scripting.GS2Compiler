@@ -21,7 +21,7 @@ internal static class GS2Compiler
 			ScriptGrammar.GS1 => AntlrGs1Parser.Parse(code),
 			_                 => AntlrGs2Parser.Parse(code),
 		};
-		if (parseResult.ErrorMessage != null || parseResult.Program == null) return new() { Success = false, ErrMsg = parseResult.ErrorMessage ?? "malformed input\n", ByteCode = [] };
+		if (parseResult.ErrorMessage != null || parseResult.Program == null) return new() { Success = false, ErrMsg = parseResult.ErrorMessage ?? "malformed input\n", ByteCode = [], JoinedClasses = [] };
 		var program  = parseResult.Program;
 		var bytecode = new BytecodeWriter(program.Gs1EventFlags, grammar);
 		var emitter  = new Emitter(bytecode, program.Constants, program.Enums, grammar);
@@ -36,7 +36,7 @@ internal static class GS2Compiler
 		}
 
 		var result = bytecode.ToArray();
-		return new() { Success = true, ErrMsg = null, ByteCode = withHeader ? Header.Wrap(result, type, name) : result };
+		return new() { Success = true, ErrMsg = null, ByteCode = withHeader ? Header.Wrap(result, type, name) : result, JoinedClasses = [.. emitter.JoinedClasses] };
 	}
 
 	[System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
@@ -1509,6 +1509,8 @@ internal static class GS2Compiler
 
 	private sealed class Emitter(BytecodeWriter bytecode, Dictionary<string, Expr> constants, Dictionary<string, Dictionary<string, int>> enums, ScriptGrammar grammar)
 	{
+		public SortedSet<string> JoinedClasses { get; } = new(StringComparer.Ordinal);
+
 		private readonly Stack<List<int>>                                                 _breakPatches            = new();
 		private readonly Stack<List<int>>                                                 _continuePatches         = new();
 		private readonly Stack<Dictionary<string, (List<int> Break, List<int> Continue)>> _labeledLoops            = new([new(StringComparer.Ordinal)]);
@@ -2635,6 +2637,7 @@ internal static class GS2Compiler
 					bytecode.Emit(Op.Format);
 					break;
 				case CallExpr call:
+					if (call.Name == "join" && call.Args is [StringExpr joinedClass]) JoinedClasses.Add(joinedClass.Value);
 					bytecode.Emit(Op.TypeArray);
 					for (var i = call.Args.Count - 1; i >= 0; --i) Emit(call.Args[i]);
 					if (variables != null && variables.TryGetValue(new IdentifierExpr(call.Name), out var register))
@@ -2677,6 +2680,7 @@ internal static class GS2Compiler
 					bytecode.Emit(Op.Call);
 					break;
 				case MethodCallExpr call:
+					if (call.Name == "join" && call.Args is [StringExpr joinedMethodClass]) JoinedClasses.Add(joinedMethodClass.Value);
 					if (grammar == ScriptGrammar.GS2 && call.Name is "lower" or "upper" && call.Args.Count == 0)
 					{
 						bytecode.Emit(Op.TypeArray);
