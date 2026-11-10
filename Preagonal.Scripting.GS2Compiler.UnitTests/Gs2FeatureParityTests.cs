@@ -133,7 +133,7 @@ public class Gs2FeatureParityTests
 		Assert.True(original.Success, original.ErrMsg);
 		var functions = ReadFunctions(ReadSegments(original.ByteCode)[2]);
 		Assert.Equal(
-			new[] { "higherOrderFunction", "processWithCallback", "testHigherOrder", "testLambdas" },
+			["higherOrderFunction", "processWithCallback", "testHigherOrder", "testLambdas"],
 			functions.Where(function => !function.Name.StartsWith("public.function_", StringComparison.Ordinal)).Select(function => function.Name).Order(StringComparer.Ordinal)
 		);
 		Assert.Equal(
@@ -243,7 +243,7 @@ public class Gs2FeatureParityTests
 	{
 		var expectedSegments = ReadSegments(expected);
 		var actualSegments   = ReadSegments(actual);
-		Assert.Equal(new[] { 1, 2, 3, 4 }, expectedSegments.Keys);
+		Assert.Equal([1, 2, 3, 4], expectedSegments.Keys);
 		Assert.Equal(expectedSegments.Keys, actualSegments.Keys);
 		Assert.Equal(expectedSegments[1], actualSegments[1]);
 		Assert.Equal(expectedSegments[4], actualSegments[4]);
@@ -260,7 +260,7 @@ public class Gs2FeatureParityTests
 		string[] NormalizeStrings(byte[] bytes, List<(string Name, int Address)> functions)
 		{
 			var names = functions.Where(function => generatedName.IsMatch(function.Name)).ToDictionary(function => function.Name[7..], function => generatedName.Replace(function.Name, "$1ID$2"));
-			return Encoding.UTF8.GetString(bytes).Split('\0').Select(value => names.GetValueOrDefault(value, value)).ToArray();
+			return [.. Encoding.UTF8.GetString(bytes).Split('\0').Select(value => names.GetValueOrDefault(value, value))];
 		}
 	}
 
@@ -271,7 +271,7 @@ public class Gs2FeatureParityTests
 		{
 			var type   = BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(offset));
 			var length = BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(offset + 4));
-			segments.Add(type, bytes.AsSpan(offset + 8, length).ToArray());
+			segments.Add(type, [.. bytes.AsSpan(offset + 8, length)]);
 			offset += 8 + length;
 		}
 

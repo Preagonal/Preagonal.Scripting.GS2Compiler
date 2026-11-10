@@ -1,5 +1,4 @@
 using Antlr4.Runtime;
-using Xunit;
 
 namespace Preagonal.Scripting.GS2Compiler.UnitTests;
 

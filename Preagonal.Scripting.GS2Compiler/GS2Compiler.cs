@@ -50,7 +50,7 @@ internal static class GS2Compiler
 			if (count == buckets.Length)
 			{
 				var previous = buckets;
-				buckets = Enumerable.Range(0, previous.Length * 8).Select(_ => new List<T>()).ToArray();
+				buckets = [.. Enumerable.Range(0, previous.Length * 8).Select(_ => new List<T>())];
 				foreach (var entry in previous.SelectMany(bucket => bucket))
 					buckets[GraalNameHash(name(entry)) & (uint)(buckets.Length - 1)].Insert(0, entry);
 			}
@@ -59,7 +59,7 @@ internal static class GS2Compiler
 			count++;
 		}
 
-		return buckets.SelectMany(bucket => bucket).ToArray();
+		return [.. buckets.SelectMany(bucket => bucket)];
 	}
 
 	[System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
@@ -476,7 +476,7 @@ internal static class GS2Compiler
 
 					var args = BuildArguments(part.argumentList());
 					if (expression is IdentifierExpr { Name: "sarraylen" } && part.argumentList() is { } stringArguments)
-						args = stringArguments.expression().Select(argument => (Expr)new StringExpr(argument.GetText())).ToList();
+						args = [.. stringArguments.expression().Select(argument => (Expr)new StringExpr(argument.GetText()))];
 					expression = expression switch
 					{
 						IdentifierExpr id        => new CallExpr(id.Name, args),
@@ -544,7 +544,7 @@ internal static class GS2Compiler
 			private LambdaExpr BuildLambda(GS2Parser.LambdaExpressionContext context) => new($"function_100_{_lambdaId++}", BuildArguments(context.argumentList()), BuildStatementBody(context.statement()));
 
 			private Expr BuildNewExpression(GS2Parser.NewExpressionContext context) =>
-				context.IDENTIFIER() != null ? new NewObjectExpr(context.IDENTIFIER().GetText(), BuildArguments(context.argumentList())) : new NewArrayExpr(context.arrayRank().Select(rank => BuildExpression(rank.expression())).ToList());
+				context.IDENTIFIER() != null ? new NewObjectExpr(context.IDENTIFIER().GetText(), BuildArguments(context.argumentList())) : new NewArrayExpr([.. context.arrayRank().Select(rank => BuildExpression(rank.expression()))]);
 
 			private static Expr ApplyIndices(Expr expression, List<Expr> indices, bool zeroWhenEmpty) =>
 				indices.Count switch
@@ -554,7 +554,7 @@ internal static class GS2Compiler
 					_ => new MultiArrayIndexExpr(expression, indices),
 				};
 
-			private List<Expr> BuildArguments(GS2Parser.ArgumentListContext? context) => context == null ? [] : context.expression().Select(BuildExpression).ToList();
+			private List<Expr> BuildArguments(GS2Parser.ArgumentListContext? context) => context == null ? [] : [.. context.expression().Select(BuildExpression)];
 
 			private static Expr BuildBinaryChain<TContext>(ParserRuleContext context, TContext[] operands, Func<TContext, Expr> buildOperand) where TContext : ParserRuleContext
 			{
@@ -767,9 +767,9 @@ internal static class GS2Compiler
 			private ExprStmt BuildCommand(GS1Parser.BuiltinCommandStatementContext context)
 			{
 				if (context is not GS1Parser.StatementBuiltInCommandContext command) throw Failure(context);
-				var name                                                                           = command.COMMAND().GetText().Trim();
-				var args                                                                           = command.builtInCommandExpression().Select(BuildBuiltInCommandExpression).ToList();
-				var parameterStart = name switch { "triggeraction" => 3, "setshootparams" => 0, _ => args.Count };
+				var name                                                            = command.COMMAND().GetText().Trim();
+				var args                                                            = command.builtInCommandExpression().Select(BuildBuiltInCommandExpression).ToList();
+				var parameterStart                                                  = name switch { "triggeraction" => 3, "setshootparams" => 0, _ => args.Count };
 				for (var i = 0; i < args.Count && i <= parameterStart; ++i) args[i] = TrimArgument(args[i]);
 				if (name is "set" or "unset" && args.Count == 1)
 				{
@@ -801,7 +801,7 @@ internal static class GS2Compiler
 					return new(new MethodCallExpr(new DynamicVarExpr(BuildText(command.builtInCommandExpression(0))), "remove", [AsString(args[1])]) { IsGs1Embedded = true });
 				if (args.Count > parameterStart + 1)
 				{
-					var parameters = args[parameterStart];
+					var parameters                                                     = args[parameterStart];
 					foreach (var argument in args.Skip(parameterStart + 1)) parameters = AppendParameterText(AppendText(parameters, new StringExpr(",")), argument);
 					args = [.. args.Take(parameterStart), parameters];
 				}
@@ -813,9 +813,7 @@ internal static class GS2Compiler
 
 			// The grammar splits comma-separated parameters, but GS1 passes one interpolated string.
 			[System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-			private static Expr AppendParameterText(Expr left, Expr right) => right is BinaryExpr { Op: "@" } text
-				? AppendParameterText(AppendParameterText(left, text.Left), text.Right)
-				: AppendText(left, right);
+			private static Expr AppendParameterText(Expr left, Expr right) => right is BinaryExpr { Op: "@" } text ? AppendParameterText(AppendParameterText(left, text.Left), text.Right) : AppendText(left, right);
 
 			private static Expr TrimArgument(Expr expression) =>
 				expression switch
@@ -866,7 +864,7 @@ internal static class GS2Compiler
 				if (operandContexts.Length > 1) _comparisonContext = false;
 				try
 				{
-					operands = operandContexts.Select(BuildLogicalOr).ToArray();
+					operands = [.. operandContexts.Select(BuildLogicalOr)];
 				}
 				finally
 				{
@@ -957,7 +955,7 @@ internal static class GS2Compiler
 			{
 				if (context is not GS1Parser.ExpressionInContext inExpression) throw Failure(context);
 				var  subjects = inExpression.additiveExpression().Select(BuildAdditive).ToList();
-				Expr left     = subjects.Count == 1 ? subjects[0] : new ArrayLiteralExpr(subjects);
+				var left     = subjects.Count == 1 ? subjects[0] : new ArrayLiteralExpr(subjects);
 				if (inExpression.OP_IN() == null) return left;
 				if (inExpression.range_literal() is { } rangeLiteral)
 				{
@@ -1097,7 +1095,7 @@ internal static class GS2Compiler
 			private (string Name, List<Expr> Indices) BuildIdentifierValue(GS1Parser.Identifier_valueContext context)
 			{
 				if (context is not GS1Parser.IdentifierValueContext value) throw Failure(context);
-				return (value.compound_identifier().GetText(), value.expression().Select(BuildExpression).ToList());
+				return (value.compound_identifier().GetText(), [.. value.expression().Select(BuildExpression)]);
 			}
 
 			private static Expr BuildDottedIdentifier(string name, List<Expr> indices)
@@ -1282,7 +1280,7 @@ internal static class GS2Compiler
 				if (code == "#T" && arguments.Length == 1) return new MethodCallExpr(TrimArgument(BuildExpression(arguments[0])), "trim", []) { IsGs1Embedded                                                    = true };
 				if (code.StartsWith("#P", StringComparison.Ordinal) || code.StartsWith("#C", StringComparison.Ordinal))
 				{
-					Expr? index = int.TryParse(code.AsSpan(2), out var value) ? new NumberExpr(value.ToString(CultureInfo.InvariantCulture)) : arguments.Length == 1 ? BuildExpression(arguments[0]) : null;
+					var index = int.TryParse(code.AsSpan(2), out var value) ? new NumberExpr(value.ToString(CultureInfo.InvariantCulture)) : arguments.Length == 1 ? BuildExpression(arguments[0]) : null;
 					if (index != null) return new ArrayIndexExpr(new MemberExpr(code.Length > 2 ? player : new IdentifierExpr("player"), code[1] == 'P' ? "attr" : "colors"), index);
 				}
 
@@ -1526,8 +1524,8 @@ internal static class GS2Compiler
 		// case in Emit), so these are stacked per function-emission, not per-loop.
 		// Seeded with one base scope so a goto/label statement written at top level (outside any
 		// function) also resolves, without EmitFunction needing to special-case "am I nested".
-		private readonly Stack<Dictionary<string, int>>       _labelAddresses     = new([new Dictionary<string, int>(StringComparer.Ordinal)]);
-		private readonly Stack<Dictionary<string, List<int>>> _pendingGotoPatches = new([new Dictionary<string, List<int>>(StringComparer.Ordinal)]);
+		private readonly Stack<Dictionary<string, int>>       _labelAddresses     = new([new(StringComparer.Ordinal)]);
+		private readonly Stack<Dictionary<string, List<int>>> _pendingGotoPatches = new([new(StringComparer.Ordinal)]);
 		private          int                                  _newObjectCount;
 		private          bool                                 _dynamicMethodName;
 
@@ -1543,8 +1541,8 @@ internal static class GS2Compiler
 			if (grammar == ScriptGrammar.GS2 && addedFunction && node.ObjectName == null && node.Name == "onServerListerConnect")
 				bytecode.AddFunction("universe." + node.Name, node.Name, true, bytecode.OpIndex, 0);
 			_tempAliases.Push(CollectTempAliases(node));
-			_labelAddresses.Push(new Dictionary<string, int>(StringComparer.Ordinal));
-			_pendingGotoPatches.Push(new Dictionary<string, List<int>>(StringComparer.Ordinal));
+			_labelAddresses.Push(new(StringComparer.Ordinal));
+			_pendingGotoPatches.Push(new(StringComparer.Ordinal));
 			_labeledLoops.Push(new(StringComparer.Ordinal));
 			bytecode.Emit(Op.TypeArray);
 			for (var i = node.Args.Count - 1; i >= 0; --i) Emit(node.Args[i]);
@@ -3735,9 +3733,13 @@ internal static class GS2Compiler
 		public static byte[] Wrap(byte[] bytecode, string type, string name)
 		{
 			var        info   = Encoding.UTF8.GetBytes($"{type},{name},0,");
-			List<byte> result = [0xAC, (byte)((info.Length >> 8) & 0xFF), (byte)(info.Length & 0xFF)];
-			result.AddRange(info);
-			result.AddRange(bytecode);
+			List<byte> result =
+			[
+				0xAC, (byte)((info.Length >> 8) & 0xFF), (byte)(info.Length & 0xFF),
+				.. info,
+
+				.. bytecode,
+			];
 			return [.. result];
 		}
 	}
