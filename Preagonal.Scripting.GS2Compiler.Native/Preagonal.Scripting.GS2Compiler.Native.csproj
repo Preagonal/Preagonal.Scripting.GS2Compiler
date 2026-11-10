@@ -1,5 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+    <Sdk Name="StuDev.AotAnywhere" Version="1.1.0" />
+
     <ItemGroup>
         <ProjectReference Include="..\Preagonal.Scripting.GS2Compiler\Preagonal.Scripting.GS2Compiler.csproj"/>
     </ItemGroup>
