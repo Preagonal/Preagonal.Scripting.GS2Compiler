@@ -1,0 +1,7 @@
+//#CLIENTSIDE
+function repeated() {temp.i=0;echo(i,i,i,i);}
+function backwards() {for(i=0;i<2;i++) echo(i);temp.i=7;}
+function parameter(temp.i) {for(i=0;i<2;i++) echo(i);}
+function members() {this.i=0;for(i=0;i<2;i++) echo(i);}
+function separate() {this.i=0;for(temp.i=0;temp.i<2;temp.i++) echo(this.i,temp.i);}
+function assigned() {temp.i=1;i=2;i=3;i=4;i=5;echo(temp.i,i);}

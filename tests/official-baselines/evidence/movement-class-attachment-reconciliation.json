@@ -1,0 +1,18 @@
+{
+  "beforeResults": "gs2-goto-through-movement-checkpoint.trx",
+  "afterResults": "gs2-movement-class-attachment.trx",
+  "beforePassed": 639,
+  "afterPassed": 641,
+  "before": 43,
+  "after": 42,
+  "newFailures": [],
+  "resolved": [
+    "43a74890-a1e6-6898-e13d-494e0d881f3a"
+  ],
+  "changedFailures": [],
+  "fixture": "advanced/graalx/weapon-Movement.gs2",
+  "officialBytes": 2992,
+  "scope": "Bytecode-only compatible fixture; NPC class attachment and missing-class behavior are not verified.",
+  "sourceChange": "Separate the single top-level join(\"movement-functions\"); declaration.",
+  "compilerChanges": false
+}

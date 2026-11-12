@@ -1,0 +1,6 @@
+//#CLIENTSIDE
+function onCreated() {
+  temp.var = {true,true};
+
+  return @var == @{1,1};
+}

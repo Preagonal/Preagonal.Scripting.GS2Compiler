@@ -83,7 +83,7 @@ def buildStepDocker() {
 			stage("Building NuGet Package") {
 				customImage.inside("-u 0") {
 					sh("chmod 777 -R .");
-					sh("dotnet pack Preagonal.Scripting.GS2Compiler/Preagonal.Scripting.GS2Compiler.csproj -c Release ${VER}");
+					sh("dotnet pack Preagonal.Scripting.GS2Compiler/Preagonal.Scripting.GS2Compiler.csproj -c Release /p:UseLocalGSAst=false ${VER}");
 					sh("chmod 777 -R .");
 				}
 			}
@@ -100,42 +100,49 @@ def buildStepDocker() {
 			stage("Run tests...") {
 				customImage.inside("-u 0") {
 					try{
-						sh("dotnet test --logger \"trx;LogFileName=../../Testing/unit_tests.xml\"");
-						sh("dotnet test /p:CollectCoverage=true /p:CoverletOutputFormat=opencover");
-						sh("chmod 777 -R .");
+						dir('Testing') {
+							deleteDir();
+						}
+						sh('dotnet test Preagonal.Scripting.GS2Compiler.UnitTests/Preagonal.Scripting.GS2Compiler.UnitTests.csproj /p:UseLocalGSAst=false --results-directory Testing --logger "trx;LogFileName=unit_tests.xml" --collect:"XPlat Code Coverage;Format=opencover"');
+						sh('for report in Testing/*/coverage.opencover.xml; do test -s "$report" || { echo "Coverage report missing or empty: $report" >&2; exit 1; }; done');
 					} catch(err) {
 						currentBuild.result = 'FAILURE'
-						sh("chmod 777 -R .");
 						discordSend(description: "Testing Failed: ${fixed_job_name} #${env.BUILD_NUMBER}", footer: "", link: env.BUILD_URL, result: currentBuild.currentResult, title: "[${split_job_name[0]}] Build Failed: ${fixed_job_name} #${env.BUILD_NUMBER}", webhookURL: env.GS2EMU_WEBHOOK);
 						notify('Build failed')
+						throw err
+					} finally {
+						sh("chmod 777 -R .");
+						archiveArtifacts (
+							artifacts: 'Testing/**/*.xml',
+							allowEmptyArchive: true,
+							fingerprint: true
+						)
+
+						stage("Xunit") {
+							xunit (
+								testTimeMargin: '3000',
+								thresholdMode: 1,
+								thresholds: [
+									skipped(failureThreshold: '1000'),
+									failed(failureThreshold: '0')
+								],
+								tools: [MSTest(
+									pattern: 'Testing/unit_tests.xml',
+									deleteOutputFiles: true,
+									failIfNotNew: false,
+									skipNoTestFiles: false,
+									stopProcessingIfError: true
+								)],
+								skipPublishingChecks: false
+							);
+						}
 					}
 
-					archiveArtifacts (
-						artifacts: 'Testing/**.xml',
-						fingerprint: true
-					)
-
+					if (currentBuild.currentResult != 'SUCCESS') {
+						error('Tests or coverage failed; package publishing is blocked.');
+					}
 					withCredentials([string(credentialsId: 'PREAGONAL_GS2COMPILER_CODECOV_TOKEN', variable: 'CODECOV_TOKEN')]) {
-					    sh('curl -s https://codecov.io/bash > codecov && chmod +x codecov && ./codecov -f Preagonal.Scripting.GS2Compiler.UnitTests/coverage*.opencover.xml -t "$CODECOV_TOKEN"')
-					}
-
-					stage("Xunit") {
-						xunit (
-							testTimeMargin: '3000',
-							thresholdMode: 1,
-							thresholds: [
-								skipped(failureThreshold: '1000'),
-								failed(failureThreshold: '0')
-							],
-							tools: [MSTest(
-								pattern: 'Testing/**.xml',
-								deleteOutputFiles: true,
-								failIfNotNew: false,
-								skipNoTestFiles: true,
-								stopProcessingIfError: true
-							)],
-							skipPublishingChecks: false
-						);
+					    sh('curl -s https://codecov.io/bash > codecov && chmod +x codecov && ./codecov -f Testing/*/coverage.opencover.xml -t "$CODECOV_TOKEN"')
 					}
 				}
 			}
@@ -145,6 +152,10 @@ def buildStepDocker() {
 					customImage.inside("-u 0") {
 						withCredentials([string(credentialsId: 'PREAGONAL_GITHUB_TOKEN', variable: 'GITHUB_TOKEN')]) {
 							sh("dotnet nuget push --skip-duplicate -s https://nuget.pkg.github.com/Preagonal/index.json -k ${env.GITHUB_TOKEN} Preagonal.Scripting.GS2Compiler/bin/Release/*.nupkg;chmod 777 -R .");
+							discordSend description: "NuGet Successful", footer: "", link: env.BUILD_URL, result: currentBuild.currentResult, title: "[${split_job_name[0]}] Artifact Successful: ${fixed_job_name} #${env.BUILD_NUMBER}", webhookURL: env.GS2EMU_WEBHOOK;
+						}
+						withCredentials([string(credentialsId: 'PREAGONAL_PRIVATE_NUGET_TOKEN', variable: 'NUGET_TOKEN')]) {
+							sh("dotnet nuget push --skip-duplicate -s https://packages.preagonal.net/nuget/ -k ${env.NUGET_TOKEN} Preagonal.Scripting.GS2Compiler/bin/Release/*.nupkg;chmod 777 -R .");
 							discordSend description: "NuGet Successful", footer: "", link: env.BUILD_URL, result: currentBuild.currentResult, title: "[${split_job_name[0]}] Artifact Successful: ${fixed_job_name} #${env.BUILD_NUMBER}", webhookURL: env.GS2EMU_WEBHOOK;
 						}
 						withCredentials([string(credentialsId: 'PREAGONAL_NUGET_TOKEN', variable: 'NUGET_TOKEN')]) {
@@ -223,14 +234,51 @@ node('master') {
 				returnStdout: true
 			).trim();
 
-			env.JSON_RESPONSE = sh(
-				script: "curl -L -X POST -H \"Accept: application/vnd.github+json\" -H \"Authorization: Bearer ${env.GITHUB_TOKEN}\" -H \"X-GitHub-Api-Version: 2022-11-28\" https://api.github.com/repos/preagonal/Preagonal.Scripting.GS2Compiler/git/tags -d '{\"tag\":\"${tagName}\",\"message\":\"${env.COMMIT_MSG}\",\"object\":\"${env.GIT_COMMIT}\",\"type\":\"tree\",\"tagger\":{\"name\":\"preagonal-pipeline[bot]\",\"email\":\"119898225+preagonal-pipeline[bot]@users.noreply.github.com\",\"date\":\"${iso8601Date}\"}}'",
+			writeJSON file: 'github-tag-request.json', json: [
+				tag: tagName,
+				message: env.COMMIT_MSG,
+				object: env.GIT_COMMIT,
+				type: 'commit',
+				tagger: [
+					name: 'preagonal-pipeline[bot]',
+					email: '119898225+preagonal-pipeline[bot]@users.noreply.github.com',
+					date: iso8601Date
+				]
+			];
+
+			def tagResponse = sh(
+				script: '''
+					curl -sS -L -X POST \
+						-H "Accept: application/vnd.github+json" \
+						-H "Authorization: Bearer $GITHUB_TOKEN" \
+						-H "X-GitHub-Api-Version: 2022-11-28" \
+						-H "Content-Type: application/json" \
+						https://api.github.com/repos/preagonal/Preagonal.Scripting.gs2compiler/git/tags \
+						--data @github-tag-request.json
+				''',
 				returnStdout: true
-			);
-			def response = readJSON(text: env.JSON_RESPONSE);
+			).trim();
+			def response = readJSON(text: tagResponse);
+
+			if (!response.sha) {
+				error("GitHub tag creation did not return a tag SHA: ${tagResponse}");
+			}
+
+			writeJSON file: 'github-ref-request.json', json: [
+				ref: "refs/tags/${tagName}",
+				sha: response.sha
+			];
 
 			sh(
-				script: "curl -L -X POST -H \"Accept: application/vnd.github+json\" -H \"Authorization: Bearer ${env.GITHUB_TOKEN}\" -H \"X-GitHub-Api-Version: 2022-11-28\" https://api.github.com/repos/preagonal/Preagonal.Scripting.GS2Compiler/git/refs -d '{\"ref\": \"refs/tags/${tagName}\", \"sha\": \"${response.sha}\"}'",
+				script: '''
+					curl -sS -L -X POST \
+						-H "Accept: application/vnd.github+json" \
+						-H "Authorization: Bearer $GITHUB_TOKEN" \
+						-H "X-GitHub-Api-Version: 2022-11-28" \
+						-H "Content-Type: application/json" \
+						https://api.github.com/repos/preagonal/Preagonal.Scripting.gs2compiler/git/refs \
+						--data @github-ref-request.json
+				''',
 				returnStdout: true
 			);
 		}

@@ -1,0 +1,62 @@
+{
+  "beforeResults": "gs2-negated-chains-checkpoint.trx",
+  "afterResults": "gs2-particle-final.trx",
+  "beforePassed": 616,
+  "afterPassed": 627,
+  "before": 62,
+  "after": 53,
+  "newFailures": [],
+  "resolved": [
+    "cefab20f-5fb0-44ec-217b-f80120c4514a",
+    "9cdc5642-6c24-049e-d01f-bdee5e4e11a8",
+    "bce6dde4-5ffd-3aa3-97c5-cbaddf72a910",
+    "bce2681c-5219-0a5d-321e-524efc5ff143",
+    "a6369d6e-ac5e-7853-ede2-1a719f6be3dc",
+    "fee76a73-e560-df53-33cd-045752ef9f04",
+    "4f288d99-75ff-d492-c673-1c69204c991e",
+    "55b5a528-e80a-1064-27f3-65d02f7a01f6",
+    "9edba9c6-d205-ad49-1709-2661ffb4ef37"
+  ],
+  "changedFailures": [],
+  "matches": [
+    {
+      "relative": "advanced/g2k1/weaponMemeCentral.gs2",
+      "bytes": 264
+    },
+    {
+      "relative": "advanced/g2k1/weaponCatch Net.gs2",
+      "bytes": 665
+    },
+    {
+      "relative": "advanced/g2k1/weaponMining Bomb.gs2",
+      "bytes": 773
+    },
+    {
+      "relative": "advanced/g2k1/weaponViolin.gs2",
+      "bytes": 529
+    },
+    {
+      "relative": "advanced/g2k1/weaponBasket.gs2",
+      "bytes": 491
+    },
+    {
+      "relative": "advanced/g2k1/weaponCandies.gs2",
+      "bytes": 591
+    },
+    {
+      "relative": "advanced/g2k1/weapon-Day-Night.gs2",
+      "bytes": 1975
+    },
+    {
+      "relative": "advanced/g2k1/weaponDiving.gs2",
+      "bytes": 236
+    },
+    {
+      "relative": "advanced/g2k1/weaponParticleEditor.gs2",
+      "officialBytes": 32253,
+      "localBytes": 32149,
+      "instructionBytes": 19104,
+      "normalization": "generated lambda IDs only"
+    }
+  ]
+}

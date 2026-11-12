@@ -1,0 +1,17 @@
+//#CLIENTSIDE
+function lambdaCache() {
+  temp.f = function() {
+    temp.x=0; temp.x++; temp.x++; temp.x++; temp.x++;
+    for (temp.i=0; temp.i<3; temp.i++) echo(temp.x);
+  };
+}
+function lambdaNoCall() { temp.f=function() { temp.x=1; }; }
+function lambdaWithCall() { temp.f=function() { echo("x"); }; }
+function ordinaryCache() { temp.x=0; temp.x++; temp.x++; temp.x++; temp.x++; for(temp.i=0;temp.i<3;temp.i++) echo(temp.x); }
+function dynamicCalls(temp.object,temp.name,temp.value) {
+  for(temp.i=0;temp.i<3;temp.i++) temp.object.("add" @ temp.name)(temp.value);
+}
+function dynamicArray(temp.objects,temp.i,temp.name) {
+  temp.objects[temp.i].(temp.name)=1;
+  temp.objects[temp.i].(temp.name)(2);
+}

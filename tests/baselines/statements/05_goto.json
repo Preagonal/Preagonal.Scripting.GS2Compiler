@@ -1,0 +1,12 @@
+{
+  "bytecode_hash": "d0c0852f84bc60ec9152e5d6b2a6acecc0c64ae07ab6f8cbadedf9958e359f5c",
+  "bytecode_size": 286,
+  "compilation_success": true,
+  "expected_failure": false,
+  "error_message": "",
+  "metadata": {
+    "script_path": "statements/05_goto.gs2",
+    "generated_at": "2026-07-07 00:00:00",
+    "compiler_version": "modified_1"
+  }
+}

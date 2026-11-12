@@ -1,0 +1,9 @@
+{
+  "type": "weapon",
+  "name": "-tmpweapon",
+  "byteCodeBase64": "AAAAAQAAAAQAAAAAAAAAAgAAABQAAAAbdXNlZAAAAAABdW51c2VkAAAAAAMAAAAccwBpAGFiYwB1cHBlcmNhc2UAbG93ZXJjYXNlAAAAAAQAAABaAfM6F70W8AAjMwq9FvAAIyS9FvABIyGJvRbwACMkvRbwASOKFPMABwHzOhe9FvAAIzMKFxXwAm4U8wO9FvAAIyJvF70W8AAjIhbwAwYXvRbwACMiFvAEBiUH",
+  "byteCount": 174,
+  "outputPath": "/tmp/unused-builtins.gs2bc",
+  "temporaryScriptRemoved": true,
+  "success": true
+}

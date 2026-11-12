@@ -1,0 +1,19 @@
+//#CLIENTSIDE
+function values(temp.x) {
+ temp.a=int(temp.x)/20;
+ temp.b=int(temp.x)+1;
+ temp.c=1-int(temp.x);
+ temp.d=float(temp.x)+1;
+ temp.e=int(temp.x);
+ temp.f=arr[int(temp.x)];
+ temp.g=int(temp.x)==1;
+ temp.h=int(temp.x)<2;
+ if(int(temp.x)) echo(1);
+ echo(playerreading,playerdir);
+ playerreading=1;playerdir=2;
+}
+function logic() {
+ if((a==false&&b==true)||c==false) echo(1);
+ if((a&&b)||c) echo(2);
+ if((a||b)&&c) echo(3);
+}

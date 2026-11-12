@@ -1,0 +1,14 @@
+{
+  "beforeResults": "gs2-ascii-control-flow-verified.trx",
+  "afterResults": "gs2-goto-local-verified.trx",
+  "beforePassed": 602,
+  "afterPassed": 613,
+  "before": 65,
+  "after": 64,
+  "newFailures": [],
+  "changedFailures": [],
+  "localOnly": ["statements/05_goto.gs2"],
+  "removedHistoricalCheck": "3c89a7cf-0bef-20d2-df51-6b6d44acd960",
+  "addedJumpTargetTests": 11,
+  "note": "User-approved local extension; not an official parity match. Original source, historical baseline and official rejection are preserved."
+}

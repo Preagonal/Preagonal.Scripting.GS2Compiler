@@ -1,0 +1,47 @@
+{
+  "beforeResults": "gs2-bare-commands-checkpoint.trx",
+  "afterResults": "gs2-serverlists-verified.trx",
+  "beforePassed": 654,
+  "afterPassed": 664,
+  "before": 33,
+  "after": 27,
+  "newFailures": [],
+  "resolved": [
+    "272b9f92-3178-ecd8-fa95-7257f6581ab2",
+    "a99d7c64-abf7-6af6-29d4-ccf0d413908d",
+    "fb665b8b-a47e-c961-595e-966da8ebb816",
+    "4f5f51b3-0314-0530-72bc-838550785bb1",
+    "2c07b7b9-eeb9-286a-0ca3-643f0051af70",
+    "88ac3fac-7952-08ba-525e-376b4da7b0f0"
+  ],
+  "changedFailures": [],
+  "matches": [
+    {
+      "relative": "advanced/loginserver/weapon-Adventure.gs2",
+      "bytes": 428
+    },
+    {
+      "relative": "advanced/loginserver/weapon-IRC_Login4.gs2",
+      "bytes": 157
+    },
+    {
+      "relative": "advanced/loginserver/weapon-Rescripted_IRC_Login3.gs2",
+      "bytes": 392
+    },
+    {
+      "relative": "advanced/loginserver/weapon-Rescripted_IRC_Login4.gs2",
+      "bytes": 95
+    },
+    {
+      "relative": "advanced/loginserver/weapon-Rescripted_Serverlist.gs2",
+      "bytes": 37343
+    },
+    {
+      "relative": "advanced/loginserver/weapon-ServerListScreen.gs2",
+      "bytes": 34095
+    }
+  ],
+  "replacedInterfaceTest": "Given_universe_object_function_When_compiling_Then_function_table_matches_reference_name",
+  "previousTestEvidence": "legacy-universe-previous-test.txt",
+  "replacementVerifiedBy": "legacy-universe"
+}

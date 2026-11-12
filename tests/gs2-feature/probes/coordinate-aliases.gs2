@@ -1,0 +1,11 @@
+//#CLIENTSIDE
+function coords() {
+  temp.a=playerx; temp.b=playery; temp.c=playerz;
+  playerx=1; playery+=2; playerz++;
+  echo(playerx,playery,playerz,player.x,player.y,player.z);
+  for(temp.i=0;temp.i<2;temp.i++) echo(playerx,playery);
+}
+function scoped(temp.playery) {
+  temp.playery=3; this.playery=4; temp.a=playery;
+  echo(temp.playery,this.playery,playery);
+}

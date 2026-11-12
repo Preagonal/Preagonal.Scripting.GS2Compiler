@@ -1,0 +1,9 @@
+{
+  "type": "weapon",
+  "name": "-tmpweapon",
+  "byteCodeBase64": "AAAAAQAAAAQAAAAAAAAAAgAAAA0AAAABcHJvZHVjdHMAAAAAAwAAABB5AHgAYQBiAGMAZABlAGYAAAAABAAAAIYB81oXvRbwACO9FvABIzMKvRbwAiO9FvABIyFYIUUU8wQ+Mr0W8AMjvRbwASMhRb0W8AAjIT4yvRbwBCMU8/69FvABIyE+Mr0W8AUjvRbwASMhvRbwACMhPkUyvRbwBiO9FvABIyFFFPMEPzK9FvAHI70W8AEjIVkhRb0W8AAjIT4yFPMABw==",
+  "byteCount": 199,
+  "outputPath": "/tmp/gs2-unary-products.gs2bc",
+  "temporaryScriptRemoved": true,
+  "success": true
+}

@@ -1,0 +1,18 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+    <File Path="codecov.yml" />
+    <File Path="Jenkinsfile" />
+    <File Path="NuGet.Config" />
+    <File Path="renovate.json" />
+  </Folder>
+  <Project Path="Preagonal.Scripting.GS2Compiler.Cli/Preagonal.Scripting.GS2Compiler.Cli.csproj" />
+  <Project Path="Preagonal.Scripting.GS2Compiler.Native/Preagonal.Scripting.GS2Compiler.Native.csproj" />
+  <Project Path="Preagonal.Scripting.GS2Compiler.UnitTests/Preagonal.Scripting.GS2Compiler.UnitTests.csproj" />
+  <Project Path="Preagonal.Scripting.GS2Compiler/Preagonal.Scripting.GS2Compiler.csproj" />
+</Solution>

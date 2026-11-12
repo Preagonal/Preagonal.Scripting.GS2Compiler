@@ -1,0 +1,5 @@
+//#CLIENTSIDE
+function values() {
+ for(i=0;i<params[0];i++) echo(params[i]);
+ for(j=0;j<2;j++) {temp.a=client.x;echo(int(client.x),float(client.x));}
+}

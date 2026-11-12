@@ -1,0 +1,16 @@
+{
+  "tool": "preagonal-client-headless.upload_class_and_weapon",
+  "request": {
+    "class_name": "preagonal-parity-join-fixture",
+    "class_script_text": "//#CLIENTSIDE\nfunction parityClassValue() { return 17; }\n",
+    "weapon_script_text": "//#CLIENTSIDE\njoin(\"preagonal-parity-join-fixture\");\nfunction onCreated() { temp.value = parityClassValue(); }\n",
+    "class_output_path": "/tmp/gs2-join-class.gs2bc",
+    "weapon_output_path": "/tmp/gs2-join-weapon.gs2bc"
+  },
+  "response": {
+    "npcProperties": [],
+    "temporaryScriptsRemoved": true,
+    "success": false,
+    "diagnostic": "Timed out waiting for compiled class and weapon bytecode after 30 seconds."
+  }
+}

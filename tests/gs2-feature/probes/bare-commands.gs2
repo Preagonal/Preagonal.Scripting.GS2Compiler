@@ -1,0 +1,7 @@
+//#CLIENTSIDE
+function bare() { destroy; }
+function called() { destroy(); }
+function scoped() { temp.destroy; this.destroy; }
+function condition(temp.x) { if(temp.x) destroy; }
+function values() { temp.x=destroy; echo(destroy); }
+function other() { custom; hide; show; enableweapons; }

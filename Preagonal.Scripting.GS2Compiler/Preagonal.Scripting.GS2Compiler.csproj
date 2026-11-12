@@ -1,39 +1,38 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-	<PropertyGroup>
-		<ImplicitUsings>false</ImplicitUsings>
-		<Nullable>enable</Nullable>
-		<DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
-		<LangVersion>latest</LangVersion>
-		<Title>GS2Compiler</Title>
-		<Authors>Preagonal</Authors>
-		<Copyright>Preagonal 2026</Copyright>
-		<PackageProjectUrl>https://github.com/Preagonal/Preagonal.Scripting.GS2Compiler</PackageProjectUrl>
-		<RepositoryUrl>https://github.com/Preagonal/Preagonal.Scripting.GS2Compiler</RepositoryUrl>
-		<PackageId>Preagonal.Scripting.GS2Compiler</PackageId>
-		<Description>GS2 compiler compatible with Preagonal.Scripting.GS2Engine.</Description>
-		<PackageTags>gs2;graal;compiler;preagonal</PackageTags>
-		<PackageReadmeFile>README.md</PackageReadmeFile>
-		<AssemblyVersion>1.0.0</AssemblyVersion>
-		<FileVersion>1.0.0</FileVersion>
-		<NeutralLanguage>en-US</NeutralLanguage>
-		<TargetFramework>net10.0</TargetFramework>
-		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-		<IsAotCompatible>true</IsAotCompatible>
-	</PropertyGroup>
+    <PropertyGroup>
+        <ImplicitUsings>false</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+        <LangVersion>latest</LangVersion>
+        <Title>GS2Compiler</Title>
+        <Authors>Preagonal</Authors>
+        <Copyright>Preagonal 2026</Copyright>
+        <PackageProjectUrl>https://github.com/Preagonal/Preagonal.Scripting.GS2Compiler</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/Preagonal/Preagonal.Scripting.GS2Compiler</RepositoryUrl>
+        <PackageId>Preagonal.Scripting.GS2Compiler</PackageId>
+        <Description>GS2 compiler compatible with Preagonal.Scripting.GS2Engine.</Description>
+        <PackageTags>gs2;graal;compiler;preagonal</PackageTags>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <AssemblyVersion>1.0.0</AssemblyVersion>
+        <FileVersion>1.0.0</FileVersion>
+        <NeutralLanguage>en-US</NeutralLanguage>
+        <TargetFramework>net11.0</TargetFramework>
+        <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+        <IsAotCompatible>true</IsAotCompatible>
+        <UseLocalGSAst Condition="'$(Configuration)' == 'Debug'">false</UseLocalGSAst>
+    </PropertyGroup>
 
-	<ItemGroup>
-		<PackageReference Include="Antlr4BuildTasks" Version="12.14.0" PrivateAssets="all" />
-		<PackageReference Include="Antlr4.Runtime.Standard" Version="4.13.1" />
-	</ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="Antlr4.Runtime.Standard" Version="4.13.1"/>
+        <PackageReference Include="Preagonal.Scripting.GSAst" Version="0.0.5" Condition="'$(UseLocalGSAst)' != 'true'"/>
+        <PackageReference Include="Preagonal.Scripting.GSAst.Grammar" Version="0.0.5" Condition="'$(UseLocalGSAst)' != 'true'"/>
+        <ProjectReference Include="..\..\preagonal.scripting.gsast\Preagonal.Scripting.GSAst\Preagonal.Scripting.GSAst.csproj" Condition="'$(UseLocalGSAst)' == 'true'"/>
+        <ProjectReference Include="..\..\preagonal.scripting.gsast\Preagonal.Scripting.GSAst.Grammar\Preagonal.Scripting.GSAst.Grammar.csproj" Condition="'$(UseLocalGSAst)' == 'true'"/>
+    </ItemGroup>
 
-	<ItemGroup>
-		<None Include="..\README.md" Pack="true" PackagePath="\" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<Antlr4 Include="Grammar\GS2Lexer.g4" Listener="false" Visitor="false" />
-		<Antlr4 Include="Grammar\GS2Parser.g4" Listener="false" Visitor="true" />
-	</ItemGroup>
+    <ItemGroup>
+        <None Include="..\README.md" Pack="true" PackagePath="\"/>
+    </ItemGroup>
 
 </Project>

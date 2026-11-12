@@ -1,0 +1,9 @@
+{
+  "type": "weapon",
+  "name": "-tmpweapon",
+  "byteCodeBase64": "AAAAAQAAAAQAAAAAAAAAAgAAACkAAAAWb25BY3Rpb25DbGllbnRTaWRlAAAAAAFvblBsYXllckNoYXRzAAAAAAMAAABNY2hhdAB0ZXN0AG5hbWUAZ3VpAHRyaWdnZXJzZXJ2ZXIAbGluZXMAdW5rbm93bl9vYmplY3QAVFN0YXRpY1ZhcgAvAHNhdmVsaW5lcwAAAAAEAAAAdAHzSBczCgm2FvAAIxXwAUYE8xMXtBbwAiMV8AMW8AQGIBTzAAcB80gXMwoJvRbwBSMW8AYV8AcqMr0W8AUjviQU8wCDMhcZviQU8wGDJBTzAIMiFfAIcb4kFPMBgyQU8wGDInG9FvAFIyQW8AkjBiAU8wAH",
+  "byteCount": 270,
+  "outputPath": "/tmp/reconcile-b2.gs2bc",
+  "temporaryScriptRemoved": true,
+  "success": true
+}

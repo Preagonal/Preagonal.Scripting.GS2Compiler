@@ -1,0 +1,9 @@
+//#CLIENTSIDE
+function products(temp.x,temp.y) {
+  temp.a=-sin(temp.x)*4;
+  temp.b=-temp.x*temp.y;
+  temp.c=-2*temp.x;
+  temp.d=-(temp.x*temp.y);
+  temp.e=-temp.x/4;
+  temp.f=-cos(temp.x)*temp.y;
+}

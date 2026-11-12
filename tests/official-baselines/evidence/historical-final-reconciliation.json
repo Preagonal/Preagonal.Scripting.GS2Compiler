@@ -1,0 +1,39 @@
+{
+  "beforeResults": "gs2-literal-casts.trx",
+  "afterResults": "gs2-historical-reconciled.trx",
+  "beforePassed": 688,
+  "afterPassed": 693,
+  "before": 5,
+  "after": 0,
+  "newFailures": [],
+  "resolved": [
+    "5e2b7fc7-d5b5-e886-1040-4dda0e6a1698",
+    "e398b60c-0688-38ff-fbbe-727b44045113",
+    "46b5bdea-6acf-92d4-fc1e-a04e23246e1f",
+    "2151a5f7-f0aa-a34b-695d-ea919603c39b",
+    "02d93a83-cd83-398d-971d-33d0cc7ae32e"
+  ],
+  "changedFailures": [],
+  "matches": [
+    {
+      "relative": "advanced/graalx/weaponStaff_Axe.gs2",
+      "bytes": 924
+    },
+    {
+      "relative": "advanced/graalx/weapon-Job Quests.gs2",
+      "bytes": 3503
+    },
+    {
+      "relative": "advanced/graalx/weaponLevelEditor.gs2",
+      "bytes": 6747
+    },
+    {
+      "relative": "advanced/graalx/weaponNotepad.gs2",
+      "bytes": 2594
+    },
+    {
+      "relative": "advanced/graalx/weaponSystems_FoodSys.gs2",
+      "bytes": 504
+    }
+  ]
+}

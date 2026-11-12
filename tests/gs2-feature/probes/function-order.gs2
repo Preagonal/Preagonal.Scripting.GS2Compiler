@@ -1,0 +1,7 @@
+//#CLIENTSIDE
+function zebra() {}
+public function beta() {}
+function alpha.z() {}
+function omega.a() {}
+function alpha.a() {}
+function plain() {}

@@ -1,0 +1,10 @@
+//#CLIENTSIDE
+function values(temp.a) {
+ temp.a+=1;
+ temp.b=temp.a+=2;
+ temp.c=makevar("n")+=3;
+ temp.d=arr[0]+=4;
+ temp.e=arr[0,1]+=4;
+ echo(temp.a+=5);
+ return(temp.a+=6);
+}

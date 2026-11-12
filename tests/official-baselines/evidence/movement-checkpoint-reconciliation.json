@@ -1,0 +1,49 @@
+{
+  "beforeResults": "gs2-unary-products-verified.trx",
+  "afterResults": "gs2-goto-through-movement-checkpoint.trx",
+  "beforePassed": 632,
+  "afterPassed": 639,
+  "before": 50,
+  "after": 43,
+  "newFailures": [],
+  "resolved": [
+    "792ee1d3-b158-6a54-33fa-8b83ca0d41b7",
+    "e975247a-080f-7ec8-99a8-325f2f5f0ef4",
+    "70a5385d-36a4-2307-32fd-16bd8ec4ce83",
+    "0d90f4c8-a003-e9d5-cceb-4374b25d3196",
+    "e9537d33-ff3e-f842-b335-e621761506fc",
+    "43c3a206-2d65-393d-1c84-ec30d8a0bc6a",
+    "fde5b7ad-ff05-a113-40d7-29380bc85b4b"
+  ],
+  "changedFailures": [],
+  "matches": [
+    {
+      "relative": "advanced/g2k1/weaponWater Can.gs2",
+      "bytes": 774
+    },
+    {
+      "relative": "advanced/graalx/weaponKinetaro.gs2",
+      "bytes": 1805
+    },
+    {
+      "relative": "advanced/graalx/weapon+DogTag.gs2",
+      "bytes": 1611
+    },
+    {
+      "relative": "advanced/graalx/weapon-BuySys.gs2",
+      "bytes": 1916
+    },
+    {
+      "relative": "advanced/graalx/weapon-NBuySys.gs2",
+      "bytes": 1916
+    },
+    {
+      "relative": "advanced/graalx/weaponJobs_Stack.gs2",
+      "bytes": 938
+    },
+    {
+      "relative": "advanced/graalx/weaponJobs_Roller.gs2",
+      "bytes": 566
+    }
+  ]
+}
