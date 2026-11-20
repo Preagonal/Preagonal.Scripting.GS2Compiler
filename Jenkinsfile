@@ -18,8 +18,8 @@ def killall_jobs() {
 	def buildnum = env.BUILD_NUMBER.toInteger();
 	def killnums = "";
 	def job = Jenkins.instance.getItemByFullName(jobname);
+	def fixed_job_name = env.JOB_NAME.replace('%2F','/');
 	def split_job_name = env.JOB_NAME.split(/\/{1}/);
-	def fixed_job_name = split_job_name[1].replace('%2F',' ');
 
 	for (build in job.builds) {
 		if (!build.isBuilding()) { continue; }
@@ -43,9 +43,6 @@ def buildStepDocker() {
 	def split_job_name = env.JOB_NAME.split(/\/{1}/);
 	def fixed_job_name = split_job_name[1].replace('%2F',' ');
 
-	def customImage = docker.image("mcr.microsoft.com/dotnet/sdk:11.0");
-	customImage.pull();
-
 	try {
 		checkout(scm);
 
@@ -53,7 +50,6 @@ def buildStepDocker() {
 		def tag = '';
 		def VER = '';
 		def EXTRA_VER = '';
-
 
 		if(env.TAG_NAME) {
 			sh(returnStdout: true, script: "echo '```' > RELEASE_DESCRIPTION.txt");
@@ -68,23 +64,22 @@ def buildStepDocker() {
 		}
 
 		if (env.TAG_NAME) {
-			EXTRA_VER = "";
+			EXTRA_VER = "${env.TAG_NAME}";
 			VER = "/p:Version=${env.TAG_NAME}";
 		} else if (env.BRANCH_NAME.equals('dev')) {
-			EXTRA_VER = "-beta";
+			EXTRA_VER = "dev";
 		} else {
-			EXTRA_VER = "--build-arg VER_EXTRA=-${tag}";
+			EXTRA_VER = "${tag}";
 		}
 
 		docker.withRegistry("https://index.docker.io/v1/", "dockergraal") {
 			def release_name = env.JOB_NAME.replace('%2F','/');
 			def release_type = ("${release_name}").replace('/','-').replace('GS2Compiler-','').replace('main','').replace('dev','');
+            def customImage = docker.build("preagonal/scripting/gs2compiler:${EXTRA_VER}", "--build-arg BUILD_CONFIGURATION=Release --build-arg VER=${VER} --load --pull -f Dockerfile .");
 
 			stage("Building NuGet Package") {
 				customImage.inside("-u 0") {
-					sh("chmod 777 -R .");
-					sh("dotnet pack Preagonal.Scripting.GS2Compiler/Preagonal.Scripting.GS2Compiler.csproj -c Release /p:UseLocalGSAst=false ${VER}");
-					sh("chmod 777 -R .");
+					sh("chmod 777 -R /src");
 				}
 			}
 
