@@ -1,0 +1,9 @@
+{
+  "type": "weapon",
+  "name": "-tmpweapon",
+  "byteCodeBase64": "AAAAAQAAAAQAAAAAAAAAAgAAABUAAAABdGVzdExhcmdlTnVtYmVycwAAAAADAAAAfG1heF9pbnQAbGFyZ2VfcG9zaXRpdmUAbGFyZ2VfbmVnYXRpdmUAbGFyZ2VfZmxvYXQAc21hbGxfZmxvYXQAb3ZlcmZsb3dfdGVzdAB1bmRlcmZsb3dfdGVzdABwcmVjaXNpb24xAHByZWNpc2lvbjIAcHJlY2lzaW9uMwAAAAAEAAAAjwHzQhczCr0W8AAjFPV/////Mr0W8AEjFPU7msn/Mr0W8AIjFPXEZTYBMr0W8AMjFPUAD0JAMr0W8AQjFPMAMr0W8AUjvRbwACMhFPMBPDK9FvAGI70W8AQjIRTzAj8yvRbwByMU9jAuMwAyvRbwCCMU9jAuMzMzMzMzMzMzADK9FvAJIxT1O5rKADIU8wAH",
+  "byteCount": 324,
+  "outputPath": "/tmp/gs2-large-numbers.gs2bc",
+  "temporaryScriptRemoved": true,
+  "success": true
+}

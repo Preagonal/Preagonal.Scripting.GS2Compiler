@@ -1,0 +1,19 @@
+//#CLIENTSIDE
+function names(temp.s) { return lowercase(temp.s).starts("a"); }
+function ordinary(temp.s) { return lowercase(temp.s); }
+function upper(temp.s) { return uppercase(temp.s).pos("A"); }
+function nested(temp.s) { return helper(temp.s).starts("a"); }
+function translations(temp.s) {
+ temp.a=_("Language") @ ":";
+ temp.b="prefix" @ _("Language");
+ temp.c=_("Language") SPC temp.s;
+ temp.d=_("Language")==temp.s;
+ temp.e=_(temp.s);
+ echo(_("Language"));
+}
+function spacing(temp.s) {
+ temp.a="label" SPC temp.s;
+ temp.b="label" TAB temp.s;
+ temp.c="label" NL temp.s;
+ temp.d=temp.s SPC "label";
+}

@@ -1,0 +1,6 @@
+//#CLIENTSIDE
+function forward() {echo(i);temp.i=1;echo(i);}
+function loop() {temp.i=0;for(i=0;i<2;i++) echo(i);}
+function explicit(temp.i) {echo(i);temp.i=4;echo(i);}
+function bare(i) {temp.i=2;echo(i);}
+function scoped() {temp.i=0;with(obj){echo(i);}echo(i);}

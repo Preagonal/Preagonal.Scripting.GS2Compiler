@@ -1,0 +1,12 @@
+//#CLIENTSIDE
+function onCreated() {
+  temp.a = random(1, 2);
+  temp.b = min(1, 2);
+  temp.c = max(1, 2);
+  temp.d = exp(2);
+  temp.e = log(2, 10);
+  temp.f = pow(2, 3);
+  temp.g = getangle(1, 0);
+  temp.h = getdir(1, 0);
+  temp.i = char(65);
+}

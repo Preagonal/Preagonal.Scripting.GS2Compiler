@@ -1,0 +1,23 @@
+{
+  "type": "weapon",
+  "name": "-tmpweapon",
+  "byteCodeBase64": "AAAAAQAAAAQAAAAAAAAAAgAAABYAAAABY29vcmRzAAAAAHhzY29wZWQAAAAAAwAAACJlY2hvAHBsYXllcgBpAGEAeABiAHkAYwB6AHBsYXllcnkAAAAABAAAAR8B9ACfFzMKCRbwAC8t8wAgFvABLy3zASC9FvACIy8t8wIgvRbwAyMu8wEkFvAEIzK9FvAFIy7zASQW8AYjMr0W8AcjLvMBJBbwCCMyLvMBJBbwBCMU8wEyLvMBJBbwBiMeIRTzAjwyLvMBJBbwCCM0IBcu8wEkFvAIIy7zASQW8AYjLvMBJBbwBCMu8wEkFvAIIy7zASQW8AYjLvMBJBbwBCMu8wAGIC7zAhTzADIu8wIhFPMCSATzdQkXLvMBJBbwBiMu8wEkFvAEIy7zAAYgLvMCNCAB818U8wAHAfQAnxe9FvAJIzMKCb0W8AkjFPMDMrQW8AkjFPMEMr0W8AMjthbwBiMyF7YW8AYjtBbwCSO9FvAJIxbwAAYgFPMABw==",
+  "byteCount": 379,
+  "outputPath": "/tmp/gs2-coordinate-aliases.gs2bc",
+  "npcProperties": [
+    {
+      "packetType": "AddWeaponNPC",
+      "scriptType": "weapon",
+      "scriptName": "-tmpweapon",
+      "rawBase64": "IDBiY2FsYXJtY2xvY2sucG5naiAg",
+      "rawHex": "20 30 62 63 61 6c 61 72 6d 63 6c 6f 63 6b 2e 70 6e 67 6a 20 20",
+      "imagePropertyId": 0,
+      "image": "bcalarmclock.png",
+      "classPropertyId": 74,
+      "joinedClassNames": "",
+      "joinedClasses": []
+    }
+  ],
+  "temporaryScriptRemoved": true,
+  "success": true
+}

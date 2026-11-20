@@ -1,0 +1,9 @@
+{
+  "type": "weapon",
+  "name": "-tmpweapon",
+  "byteCodeBase64": "AAAAAQAAAAQAAAAAAAAAAgAAAAoAAAABbmFtZXMAAAAAAwAAACVuYW1lAG9iamVjdABhZGQAbW9kaWZpZXIAZW5kAGxpdGVyYWwAAAAABAAAAL4B83QXvRbwACO9FvABIzMKCb0W8AEjLy3zACAXFPMBLvMAJBXwAr0W8AAjInEV8ANxIwYgFxTzAS7zACQV8AK9FvAAIyJxFfADcSMGIBcU8wIu8wAkvRbwACMiIwYgFxTzAi7zACS9FvAAIyMGIBcU8wMu8wAkvRbwACMiFfAEcSMGIBcU8wQu8wAkFPMBIr0W8AAjInEjBiAXFPMFLvMAJBXwBSMGIC7zACQV8AK9FvAAIyJxIxTzBjIU8wAH",
+  "byteCount": 273,
+  "outputPath": "/tmp/gs2-particle-names.gs2bc",
+  "temporaryScriptRemoved": true,
+  "success": true
+}

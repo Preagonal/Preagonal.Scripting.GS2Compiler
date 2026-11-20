@@ -1,0 +1,114 @@
+{
+  "beforeResults": "gs2-serverlists-verified.trx",
+  "afterResults": "gs2-level-cache.trx",
+  "beforePassed": 664,
+  "afterPassed": 685,
+  "before": 27,
+  "after": 7,
+  "newFailures": [],
+  "resolved": [
+    "3f26682e-327f-f570-94ca-571ad0dc9825",
+    "874f7f83-bc5d-cbeb-6bf8-c610cb5fd2ee",
+    "33cec522-9d46-b34d-9f57-327f978ca560",
+    "e82e7f4e-e855-eb8e-e3e5-18afe4f33deb",
+    "9212d4a3-b1b2-6527-faac-8745b8c38cdb",
+    "e83d80b7-b930-4d46-7895-d19fd0c84247",
+    "af5fa579-08f9-2cac-fda4-bbdf7f164929",
+    "7ee848c7-842e-d06f-768f-363dfd2b8031",
+    "bd4a4e47-b382-f434-53a0-08142981df36",
+    "62f5af1a-2804-95ae-dcf5-9f5a5ba85db8",
+    "104556de-7e7e-418f-7d86-2fdbd9058371",
+    "4e2f43fa-fd67-de01-5585-92fd493f99bd",
+    "8f5754bb-82e5-28fa-1e1a-7ecd6fea7e60",
+    "157f7857-17dc-1d33-a288-7e55284c1403",
+    "82838859-3ec3-e4ab-bdad-16ca15b688bd",
+    "f8d893ee-beb0-b15a-6432-7543fb1c36bf",
+    "fb71a224-cb9e-f669-7b27-31b076bc55e6",
+    "b7f63d09-c27a-c91a-3a5e-d69c5b8b530f",
+    "471fc9be-5044-3e5f-dfc1-59caabcb785b",
+    "806d251b-2bbb-38ee-6b7d-2f5e7104030d"
+  ],
+  "changedFailures": [],
+  "matches": [
+    {
+      "relative": "advanced/loginserver/weapon-Serverlist_Patches.gs2",
+      "bytes": 262
+    },
+    {
+      "relative": "advanced/loginserver/weapon-Staff_GUIExplorer.gs2",
+      "bytes": 2688
+    },
+    {
+      "relative": "advanced/loginserver/weapon-StartConnectMessage.gs2",
+      "bytes": 2346
+    },
+    {
+      "relative": "advanced/g2k1/weaponApple Seeds.gs2",
+      "bytes": 640
+    },
+    {
+      "relative": "advanced/g2k1/weaponBread Stack.gs2",
+      "bytes": 747
+    },
+    {
+      "relative": "advanced/g2k1/weaponTestGS2.gs2",
+      "bytes": 573
+    },
+    {
+      "relative": "advanced/graalx/weapon%045Movement.gs2",
+      "bytes": 2992
+    },
+    {
+      "relative": "advanced/graalx/weaponBrasas.gs2",
+      "bytes": 1477
+    },
+    {
+      "relative": "advanced/graalx/weaponBackups_Radio.gs2",
+      "bytes": 1591
+    },
+    {
+      "relative": "advanced/graalx/weapon+Ammo.gs2",
+      "bytes": 318
+    },
+    {
+      "relative": "advanced/graalx/weapon+Food.gs2",
+      "bytes": 388
+    },
+    {
+      "relative": "advanced/graalx/weapon+Hats.gs2",
+      "bytes": 633
+    },
+    {
+      "relative": "advanced/graalx/weapon+Melee.gs2",
+      "bytes": 1273
+    },
+    {
+      "relative": "advanced/graalx/weapon+Seeds.gs2",
+      "bytes": 616
+    },
+    {
+      "relative": "advanced/graalx/weapon-Weather.gs2",
+      "bytes": 2332
+    },
+    {
+      "relative": "advanced/graalx/weapon-Events.gs2",
+      "bytes": 2580
+    },
+    {
+      "relative": "advanced/graalx/weaponFileEditor.gs2",
+      "bytes": 1853
+    },
+    {
+      "relative": "advanced/graalx/weapon-Functions.gs2",
+      "bytes": 436
+    },
+    {
+      "relative": "advanced/graalx/weapon-GraalDB.gs2",
+      "bytes": 3014
+    },
+    {
+      "relative": "advanced/graalx/weapon-Gui.gs2",
+      "bytes": 3269
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+	[Fact]
+	public void Given_temp_alias_with_string_cast_array_comparison_When_compiling_Then_bare_identifier_reads_temp_member()
+	{
+		const string scriptText =
+			"""
+						//#CLIENTSIDE
+						function onCreated() {
+						  temp.var = {true,true};
+
+						  return @var == @{1,1};
+						}
+			""";
+
+		var result = Interface.CompileCode(scriptText, withHeader: false);
+		var code = ReadBytecodeSegment(result.ByteCode);
+
+		Assert.True(result.Success);
+		Assert.True(ContainsPattern([189, 22, -1, -1, 35, 34, 23, 20, -1, 1, 20, -1, 1, 37, 34, 35, 70], code));
+	}

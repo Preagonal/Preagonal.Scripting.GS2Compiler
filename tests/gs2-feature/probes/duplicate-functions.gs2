@@ -1,0 +1,7 @@
+//#CLIENTSIDE
+function ChatBar.onAction() {
+  temp.a = 1;
+}
+function ChatBar.onAction() {
+  temp.b = 2;
+}

@@ -1,0 +1,29 @@
+//#CLIENTSIDE
+function caches(obj) {
+ echo(obj,obj,obj,obj,obj);
+ for(temp.obj: this.selected) {
+  echo(obj.name,temp.obj.name);
+  this.scheduleevent(1,"event",obj);
+  thiso.catchevent(obj,"event","handler");
+ }
+ echo(obj.name,temp.obj.name);
+}
+function names(temp.a,temp.b) {
+ for(temp.i=0;temp.i<2;temp.i++) {
+  temp.a+=1; temp.b+=1;
+  temp.c=@temp.a;
+  temp.d=@temp.a==@temp.b;
+  temp.e=@temp.a==@{1,2};
+  temp.f=this.(@temp.a);
+  this.(@temp.b)=1;
+  temp.g=this.x;
+ }
+}
+function defaults() {
+ temp.a=arr.subarray(1);
+ temp.b+=pi;
+}
+function ending(temp.x) {
+ if(temp.x) return 1;
+ else return 2;
+}

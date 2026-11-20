@@ -1,0 +1,28 @@
+//#CLIENTSIDE
+function names(temp.o,temp.key) {
+ temp.a=temp.o.(@temp.key);
+ temp.o.(@temp.key)=1;
+ temp.b=temp.o.(@key);
+ temp.o.(@key)=2;
+ temp.c=temp.o.("x"@temp.key);
+ temp.d=@{1,2}==@{1,2};
+ temp.e=@temp.key;
+ for(temp.i=0;temp.i<2;temp.i++) temp.o.(@temp.i)=temp.i;
+}
+function cases(temp.s) {
+ temp.a=temp.s.lower();
+ temp.b=temp.s.upper();
+ temp.c="ABC".lower();
+ temp.d="abc".upper();
+ temp.e="abc".substring(1);
+ temp.s.substring(1);
+ temp.s.trim();
+}
+function numbers(temp.b) {
+ temp.a=(temp.b?1:4)*2;
+ temp.c=(temp.b?1:4)<2;
+ temp.d=(temp.b?1:4)==2;
+ temp.e=(temp.b?"x":"y")@"z";
+ temp.f=this;
+ echo(VK_LEFT,VK_RIGHT);
+}

@@ -1,0 +1,30 @@
+{
+  "beforeResults": "gs1-effect-nimda-parity.trx",
+  "afterResults": "gs2-array-reconciliation.trx",
+  "before": 91,
+  "after": 88,
+  "newFailures": [],
+  "resolved": [
+    "c26d8b80-0977-0189-926b-148e6a6edfbb",
+    "cfc7d4db-3af4-a118-c044-4837d86abda6",
+    "8200ce24-ee5c-3431-dc7c-254987dd6365"
+  ],
+  "changedFailures": [
+    "f37266bf-6164-de58-1d3e-689621256be1",
+    "80c86e41-243a-876c-9618-9fdc3d99c092",
+    "2e627711-8395-0243-6e2f-1603c3d2b683",
+    "7b5a6685-a511-66a4-dd54-00d8e60e89db",
+    "a494a651-4301-8fae-515f-1ef638695d7d",
+    "d75b4153-6f4d-90b1-82fc-54221909919d",
+    "596d9fe5-6565-4904-35d4-ac3baf24ae74",
+    "b42c71d0-3e1f-049f-5152-ecbb1a643d06",
+    "fb528200-4492-9ca2-32cc-fe954cf48e06",
+    "b58b2f9e-3893-d17f-72d6-4985fb3d17e6",
+    "f174887d-ec62-a3bb-dfa1-f1e071eb8b54",
+    "ae2dddbc-9c98-6d06-f69c-1903fe242999",
+    "ffadb6bc-46ac-fd85-3f92-a6c0e7f318c7",
+    "11173c18-abca-3d6d-9b2f-1276dcafe9e7",
+    "18268056-fb10-402b-e1d3-7112f3b0c5ef",
+    "a8ca663e-ece6-a778-5312-8c4606a11f2a"
+  ]
+}

@@ -1,0 +1,25 @@
+//#CLIENTSIDE
+function unused(temp.s) {
+ temp.s.substring(test());
+ temp.s.trim();
+ temp.s.lower();
+ temp.s.upper();
+ temp.s.length();
+ temp.s.pos("x");
+ temp.s.starts("x");
+ temp.s.ends("x");
+ temp.s.charat(0);
+ temp.s.tokenize();
+ temp.s.positions("x");
+ temp.s.subarray(0);
+ temp.s.size();
+ temp.s.type();
+ sin(test());
+ int(test());
+ float(test());
+ temp.s.delete(temp.i);
+ temp.s.remove(temp.i);
+}
+function used(temp.s) {
+ return {temp.s.lower(),temp.s.upper(),temp.s.length(),"abc".length(),"abc".trim()};
+}

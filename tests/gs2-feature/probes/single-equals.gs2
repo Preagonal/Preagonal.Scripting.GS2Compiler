@@ -1,0 +1,11 @@
+//#CLIENTSIDE
+function comparisons() {
+ if(a=1) echo("if");
+ if(a=1 && b=2) echo("chain");
+ if((a=1)) echo("group");
+ if((a=1)==2) echo("nested");
+ while(a=1) break;
+ for(i=0;a=1;i++) break;
+ temp.r=(a=1);
+ temp.s=a?b=2:c=3;
+}

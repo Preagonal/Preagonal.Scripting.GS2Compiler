@@ -1,0 +1,619 @@
+//#CLIENTSIDE
+// =====================================================================
+// feature-test.gs2 — GS2 language feature regression test.
+//
+// Exercises every statement form, expression form, operator, and built-in
+// function documented in the GS2 toolchain
+// (Preagonal.Scripting.GS2Compiler / Preagonal.Scripting.GS2Decompiler),
+// plus control-flow edge cases (back edges, 3-deep nested loops,
+// break/continue at every nesting level, switch-in-switch, with-in-with,
+// continue inside a switch case inside a loop, ternary chains, long
+// &&/|| chains, multidimensional access, makevar, ...).
+//
+// COMPILABLE PART: everything before the "DECOMPILER-ONLY" marker must
+// compile cleanly with the C# GS2 compiler CLI.
+// DECOMPILER-ONLY PART: labeled break/continue is genuine GS2, but the C#
+// compiler grammar has no loop-label productions yet, so those functions
+// are NOT compiled here — they document the intended surface syntax for
+// decompiler testing.
+// =====================================================================
+
+// ---------- top-level declarations ----------
+const MAX_COUNT = 64;
+const APP_NAME = "feature-test";
+
+enum Color {
+  RED,
+  GREEN = 5,
+  BLUE
+};
+
+enum Suit { HEARTS, DIAMONDS, CLUBS, SPADES }
+
+public function onCreated() {
+  temp.r = runAll();
+  return temp.r;
+}
+
+function runAll() {
+  temp.total = 0;
+  temp.total += testLiterals();
+  temp.total += testArithmetic();
+  temp.total += testBitwise();
+  temp.total += testComparisons();
+  temp.total += testLogic();
+  temp.total += testTernary("x");
+  temp.total += testConcat(1, 2);
+  temp.total += testIfElse(5);
+  temp.total += testIfSingle(5);
+  temp.total += testWhile();
+  temp.total += testForVariants();
+  temp.total += testNestedLoops();
+  temp.total += testForeach();
+  temp.total += testSwitchInSwitch(1);
+  temp.total += testSwitchInLoop();
+  temp.total += testSwitchFallthrough(2);
+  temp.total += testWithInWith();
+  temp.total += testArrays();
+  temp.total += testStrings();
+  temp.total += testMath();
+  temp.total += testObjBuiltins(temp);
+  temp.total += testMakevar();
+  temp.total += testNew();
+  temp.total += testLambda();
+  temp.total += testMember(temp);
+  temp.total += testCalls();
+  temp.total += testIncDec();
+  temp.total += testIn(3, temp);
+  temp.total += testCoercion();
+  temp.total += testCasts("42");
+  temp.total += testConstEnum();
+  temp.total += testReturn(-1);
+  temp.total += testBackEdge();
+  temp.total += testLongChains(true, false, true, false, true);
+  temp.total += testEmpty();
+  temp.total += testPublic();
+  temp.total += testhelper.qualified();
+  testSleepWait();
+  return temp.total;
+}
+
+// ---------- literals ----------
+function testLiterals() {
+  temp.i = 42;
+  temp.neg = -17;
+  temp.f = 3.14159;
+  temp.half = .5;
+  temp.hex = 0x1F;
+  temp.s = "plain string";
+  temp.esc = "tab\there newline\nquote\"backslash\\end";
+  temp.t = true;
+  temp.ff = false;
+  temp.n = null;
+  temp.p = pi;
+  temp.p2 = pi * 2;
+  return temp.i;
+}
+
+// ---------- arithmetic ----------
+function testArithmetic(temp.base) {
+  temp.a = temp.base + 1;
+  temp.b = temp.base - 2;
+  temp.c = temp.base * 3;
+  temp.d = temp.base / 4;
+  temp.e = temp.base % 5;
+  temp.f = temp.base ^ 2;
+  temp.g = -temp.base;
+  temp.a += 10;
+  temp.b -= 10;
+  temp.c *= 2;
+  temp.d /= 2;
+  temp.e %= 3;
+  temp.f ^= 2;
+  temp.g <<= 1;
+  temp.g >>= 1;
+  temp.h = 1;
+  temp.h @= "suffix";
+  temp.w := 99;
+  temp.x = temp.y = 7;
+  return temp.a + temp.b + temp.c;
+}
+
+// ---------- bitwise ----------
+function testBitwise(temp.a, temp.b) {
+  temp.r = temp.a & temp.b;
+  temp.r = temp.a | temp.b;
+  temp.r = temp.a xor temp.b;
+  temp.r = ~temp.a;
+  temp.r = temp.a << 2;
+  temp.r = temp.a >> 2;
+  return temp.r;
+}
+
+// ---------- comparisons (incl. alternate spellings) ----------
+function testComparisons(temp.a, temp.b) {
+  if (temp.a == temp.b) return 1;
+  if (temp.a != temp.b) return 2;
+  if (temp.a <> temp.b) return 3;
+  if (temp.a < temp.b) return 4;
+  if (temp.a <= temp.b) return 5;
+  if (temp.a =< temp.b) return 6;
+  if (temp.a > temp.b) return 7;
+  if (temp.a >= temp.b) return 8;
+  if (temp.a => temp.b) return 9;
+  return 0;
+}
+
+// ---------- logic ----------
+function testLogic(temp.a, temp.b) {
+  temp.r = temp.a && temp.b;
+  temp.r = temp.a || temp.b;
+  temp.r = !temp.a;
+  temp.r = !((temp.a && temp.b) || (!temp.a && !temp.b));
+  return temp.r;
+}
+
+function testLongChains(temp.a, temp.b, temp.c, temp.d, temp.e) {
+  if (temp.a && temp.b && temp.c && temp.d && temp.e) {
+    return 1;
+  }
+  if (temp.a || temp.b || temp.c || temp.d || temp.e) {
+    return 2;
+  }
+  temp.x = temp.a && temp.b || temp.c && temp.d || temp.e;
+  temp.y = (temp.a || temp.b) && (temp.c || temp.d) && temp.e;
+  return temp.x + temp.y;
+}
+
+// ---------- ternary ----------
+function testTernary(temp.v) {
+  temp.r = temp.v == 1 ? "one" : temp.v == 2 ? "two" : temp.v == 3 ? "three" : "many";
+  temp.n = temp.v > 0 ? temp.v * 10 : -temp.v;
+  temp.b = (temp.v == 1 ? true : false) ? 100 : 200;
+  return temp.r @ temp.n;
+}
+
+// ---------- string concatenation ----------
+function testConcat(temp.a, temp.b) {
+  temp.s = "a" @ "b" @ "c";
+  temp.s @= temp.a;
+  temp.n = "num:" @ temp.b;
+  temp.m = temp.a @ temp.b;
+  temp.sp = "x" @ " " @ "y";
+  return temp.s;
+}
+
+// ---------- if / elseif / else ----------
+function testIfElse(temp.v) {
+  if (temp.v < 0) {
+    return "neg";
+  } elseif (temp.v == 0) {
+    return "zero";
+  } elseif (temp.v < 10) {
+    return "small";
+  } else {
+    return "big";
+  }
+}
+
+function testIfSingle(temp.v) {
+  if (temp.v > 0)
+    temp.w = 1;
+  else
+    temp.w = 2;
+  if (temp.v == 5) temp.w = 50;
+  return temp.w;
+}
+
+// ---------- while ----------
+function testWhile() {
+  temp.i = 0;
+  while (temp.i < 5) {
+    temp.i++;
+    if (temp.i == 3) continue;
+  }
+  while (true) {
+    temp.i++;
+    if (temp.i >= 10) break;
+  }
+  return temp.i;
+}
+
+// ---------- for variants ----------
+function testForVariants() {
+  temp.s = 0;
+  for (temp.i = 0; temp.i < 10; temp.i++) temp.s += temp.i;
+  for (; temp.s < 200; temp.s++) {
+  }
+  for (temp.j = 0; temp.j < 5; ) {
+    temp.j++;
+    if (temp.j == 2) continue;
+  }
+  return temp.s;
+}
+
+// ---------- 3-deep nested loops, break/continue at every level ----------
+function testNestedLoops() {
+  temp.total = 0;
+  for (temp.i = 0; temp.i < 5; temp.i++) {
+    for (temp.j = 0; temp.j < 5; temp.j++) {
+      for (temp.k = 0; temp.k < 5; temp.k++) {
+        if (temp.k == 1) continue;
+        if (temp.k == 3) break;
+        temp.total++;
+      }
+      if (temp.j == 1) continue;
+      if (temp.j == 3) break;
+      temp.total += 10;
+    }
+    if (temp.i == 1) continue;
+    if (temp.i == 3) break;
+    temp.total += 100;
+  }
+  return temp.total;
+}
+
+// ---------- foreach ----------
+function testForeach() {
+  temp.arr = {10, 20, 30};
+  temp.s = 0;
+  for (temp.e : temp.arr) {
+    temp.s += temp.e;
+    if (temp.e == 20) continue;
+  }
+  for (temp.e2 : temp.arr) {
+    if (temp.e2 == 10) break;
+    temp.s += temp.e2;
+  }
+  for (temp.a : temp.arr) {
+    for (temp.b : temp.arr) {
+      temp.s += temp.a * temp.b;
+    }
+  }
+  return temp.s;
+}
+
+// ---------- switch ----------
+function testSwitchInSwitch(temp.v) {
+  temp.out = "";
+  switch (temp.v) {
+    case 1:
+      switch (temp.v + 1) {
+        case 2:
+          temp.out = "one-two";
+          break;
+        default:
+          temp.out = "one-other";
+      }
+      break;
+    case 2:
+      temp.out = "two";
+      break;
+    default:
+      temp.out = "other";
+  }
+  return temp.out;
+}
+
+function testSwitchInLoop() {
+  temp.r = 0;
+  for (temp.i = 0; temp.i < 10; temp.i++) {
+    switch (temp.i % 3) {
+      case 0:
+        // NOTE: per GS2Compiler.EmitSwitch, continue inside a switch case
+        // patches to the CASE START, not the enclosing loop.
+        continue;
+      case 1:
+        temp.r += temp.i;
+        break;
+      default:
+        temp.r -= temp.i;
+    }
+    temp.r += 100;
+  }
+  return temp.r;
+}
+
+function testSwitchFallthrough(temp.v) {
+  temp.r = 0;
+  switch (temp.v) {
+    case 1:
+    case 2:
+      temp.r = 12;
+      break;
+    case 3:
+      temp.r = 3;
+    default:
+      temp.r += 100;
+  }
+  return temp.r;
+}
+
+// ---------- with ----------
+function testWithInWith() {
+  temp.a = new TWithObj();
+  temp.b = new TWithObj();
+  with (temp.a) {
+    marker = 1;
+    with (temp.b) {
+      marker = 2;
+    }
+    marker2 = 3;
+  }
+  return temp.a.marker + temp.b.marker;
+}
+
+// ---------- arrays ----------
+function testArrays() {
+  temp.arr = {1, 2, 3};
+  temp.empty = {};
+  temp.arr[0] = 10;
+  temp.v = temp.arr[1];
+  temp.m = new [3];
+  temp.m2 = new [2][3];
+  temp.m2[0, 1] = 7;
+  temp.w = temp.m2[0, 1];
+  setarray(temp.arr, 8);
+  temp.n = arraylen(temp.arr);
+  temp.n2 = sarraylen(temp.arr);
+  temp.arr.add("x");
+  temp.arr.delete(0);
+  temp.arr.insert("y", 0);
+  temp.arr.remove(1);
+  temp.arr.replace("z", 0);
+  temp.sub = temp.arr.subarray(0, 2);
+  temp.chained = temp.arr[0];
+  temp.arr.clear();
+  return temp.n;
+}
+
+// ---------- strings ----------
+function testStrings() {
+  temp.s = "  hello world  ";
+  temp.len = temp.s.length();
+  temp.sub1 = temp.s.substring(2);
+  temp.sub2 = temp.s.substring(2, 5);
+  temp.p = temp.s.pos("world");
+  temp.ps = temp.s.positions("o");
+  temp.c = temp.s.charat(1);
+  temp.st = temp.s.starts("  h");
+  temp.en = temp.s.ends("d  ");
+  temp.t = temp.s.trim();
+  temp.tok = temp.s.tokenize(" ");
+  temp.tok2 = temp.s.tokenize();
+  temp.ch = char(65);
+  temp.tr = _("translate me");
+  temp.up = temp.s.substring(0, 2).length();
+  return temp.len;
+}
+
+// ---------- math builtins (note: log takes base FIRST) ----------
+function testMath() {
+  temp.a = sin(0.5);
+  temp.b = cos(0.5);
+  temp.c = arctan(1);
+  temp.e = exp(1);
+  temp.l = log(10, 100);
+  temp.r = random(1, 10);
+  temp.m1 = min(3, 7);
+  temp.m2 = max(3, 7);
+  temp.p = pow(2, 8);
+  temp.ga = getangle(1, 2);
+  temp.gd = getdir(3, 4);
+  temp.vx = vecx(0.5);
+  temp.vy = vecy(0.5);
+  temp.ab = abs(-5);
+  temp.nested = max(min(1, 2), min(3, 4));
+  return temp.a + temp.b;
+}
+
+// ---------- object builtins ----------
+function testObjBuiltins(temp.o) {
+  temp.t = temp.o.type();
+  temp.idxs = temp.o.indices();
+  temp.l = temp.o.link();
+  temp.v = temp.o.index(2);
+  temp.f = format("n={0}", temp.v);
+  return temp.t;
+}
+
+// ---------- makevar ----------
+function testMakevar() {
+  makevar("dynvar") = 42;
+  temp.v = makevar("dynvar");
+  makevar("dyn" @ 1) = 7;
+  temp.w = makevar("dyn" @ 1);
+  temp.a = temp.b = makevar("dynvar");
+  return temp.v + temp.w;
+}
+
+// ---------- new ----------
+function testNew() {
+  temp.o1 = new TTestClass();
+  temp.o2 = new TTestClass(42);
+  new TTestClass() {
+    this.marker = 1;
+  };
+  new TTestClass(7) {
+    this.marker = 2;
+  };
+  return temp.o1;
+}
+
+// ---------- lambda ----------
+function testLambda() {
+  temp.f = function (a, b) { return a + b; };
+  temp.r = temp.f(3, 4);
+  temp.g = function () { return 99; };
+  temp.h = function (x) { return x * 2; }(21);
+  return temp.r + temp.g() + temp.h;
+}
+
+// ---------- member access ----------
+function testMember(temp.o) {
+  temp.a = temp.o.child.grandchild;
+  temp.b = temp.o.("dyn" @ "amic");
+  temp.c = this.name;
+  temp.d = player.x;
+  temp.e = level.name;
+  temp.f = thiso;
+  temp.g = playero;
+  temp.deep = temp.o.a[0].b;
+  return temp.a;
+}
+
+// ---------- calls ----------
+function helperAdd(temp.a, temp.b) {
+  return temp.a + temp.b;
+}
+
+function testCalls() {
+  temp.r = helperAdd(1, 2);
+  temp.r2 = helperAdd(helperAdd(1, 2), helperAdd(3, 4));
+  temp.r3 = testMath();
+  return temp.r + temp.r2 + temp.r3;
+}
+
+// ---------- ++ / -- ----------
+function testIncDec() {
+  temp.i = 0;
+  temp.i++;
+  ++temp.i;
+  temp.i--;
+  --temp.i;
+  temp.a = temp.i++;
+  temp.b = ++temp.i;
+  temp.c = temp.i--;
+  temp.d = --temp.i;
+  return temp.i + temp.a + temp.b;
+}
+
+// ---------- in operator ----------
+function testIn(temp.x, temp.o) {
+  if (temp.x in |1, 5|) return 1;
+  if (temp.x in |3, 3|) return 2;
+  if ("name" in temp.o) return 3;
+  if (temp.x in |-10, -1|) return 4;
+  return 0;
+}
+
+// ---------- type coercion ----------
+function testCoercion() {
+  temp.r = "5" + 1;
+  temp.r2 = "5" * 2;
+  temp.r3 = 10 - "3";
+  temp.s = 42 @ " is the answer";
+  return temp.r;
+}
+
+// ---------- casts ----------
+function testCasts(temp.x) {
+  temp.i = int(temp.x);
+  temp.f = float(temp.x);
+  temp.i2 = int(3.99);
+  return temp.i + temp.f;
+}
+
+// ---------- const / enum ----------
+function testConstEnum() {
+  temp.m = MAX_COUNT;
+  temp.n = APP_NAME;
+  temp.c = Color.GREEN;
+  temp.r = Color.RED;
+  temp.s = Suit.SPADES;
+  return temp.m + temp.c;
+}
+
+// ---------- return variants ----------
+function testReturn(temp.v) {
+  if (temp.v < 0) return;
+  return temp.v * 2;
+}
+
+// ---------- back edge (do-while shape: condition at the bottom) ----------
+function testBackEdge() {
+  temp.i = 0;
+  while (true) {
+    temp.i++;
+    if (temp.i >= 5) break;
+  }
+  temp.j = 0;
+  while (true) {
+    temp.j++;
+    if (temp.j < 3) continue;
+    if (temp.j >= 6) break;
+  }
+  return temp.i + temp.j;
+}
+
+// ---------- empty statements / blocks ----------
+function testEmpty() {
+  ;
+  {
+  }
+  if (true) ;
+  for (temp.i = 0; temp.i < 1; temp.i++) ;
+  return 0;
+}
+
+// ---------- public / qualified function names ----------
+function testPublic() {
+  return 1;
+}
+
+function testhelper.qualified() {
+  return 2;
+}
+
+// ---------- sleep / waitfor (timing builtins) ----------
+function testSleepWait() {
+  sleep(0.1);
+  waitfor("bob", "hello", 5);
+}
+
+// =====================================================================
+// DECOMPILER-ONLY — DO NOT COMPILE WITH THE C# COMPILER.
+// Labeled break/continue is genuine GS2 (confirmed by user 2026-09-12),
+// but the C# compiler grammar (GS2Parser.g4) has no loop-label
+// productions yet, so these functions are not compiled here. They
+// document the intended surface syntax (Java-like label form) for
+// decompiler T7 testing against official-toolchain bytecode.
+// =====================================================================
+
+function testLabeledBreak() {
+  temp.found = false;
+  outer: for (temp.i = 0; temp.i < 10; temp.i++) {
+    for (temp.j = 0; temp.j < 10; temp.j++) {
+      if (temp.i * temp.j > 20) {
+        temp.found = true;
+        break outer;
+      }
+    }
+  }
+  return temp.found;
+}
+
+function testLabeledContinue() {
+  temp.s = 0;
+  outer: for (temp.i = 0; temp.i < 10; temp.i++) {
+    for (temp.j = 0; temp.j < 10; temp.j++) {
+      if (temp.j == 2) continue outer;
+      temp.s++;
+    }
+  }
+  return temp.s;
+}
+
+function testLabeledBreakWhile() {
+  temp.n = 0;
+  search: while (true) {
+    temp.n++;
+    if (temp.n > 100) break search;
+    while (temp.n % 7 == 0) {
+      temp.n++;
+      if (temp.n > 50) break search;
+      break;
+    }
+  }
+  return temp.n;
+}

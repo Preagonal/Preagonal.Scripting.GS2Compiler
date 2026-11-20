@@ -1,0 +1,23 @@
+{
+  "type": "weapon",
+  "name": "-tmpweapon",
+  "byteCodeBase64": "AAAAAQAAAAQAAAAAAAAAAgAAADUAAABmcHVibGljLm9mZkhhdAAAAACPcHVibGljLm9uSGF0AAAAAAFvbldlYXBvbkZpcmVkAAAAAAMAAADGbXVkaXRlbQB1bmtub3duX29iamVjdABUU3RhdGljVmFyAGNsaWVudHIubXVkaXRlbV8AY2xpZW50AHNlbGVjdGVkd2VhcG9uAGxvYWR2YXJzZnJvbWFycmF5AHF1YW50aXR5AGl0ZW10eXBlAEFSQ0hFVFlQRV9IQVQAY2hnaGF0AGhhdABoYXRudW0ALnBuZwBoYXRvbgAAb25IYXQAb2ZmSGF0AGhhdG9mZgBzZXRhbmkAcGxheWVyZnJlZXplAGF0dHIAAAAABAAAAVoB9AC7FzMKCb0W8AAjLy3zACAu8wAW8AEV8AIqMhcV8AMW8AQkFvAFIyJxKS7zACQW8AYjBiAu8wAkFvAHIyEU8wFLBPNjLvMAJBbwCCMV8AlGBPNjtBbwCiMZRgTzY7QW8AsjFfALLvMAJBbwDCMicRXwDXEyFvAEJBbwDiO0FvALI0cE818W8AQkFvAOIxXwD0YE81YXFvAQBiAB82MXFvARBiAXFvAQBiAB82MXFvARBiAU8wAHAfQAuxczCgm0FvAKIxgyFvAEJBbwDiMV8A8yFxoV8BIW8BMGIBbwFBT2MC42NQAyFPYwLjYACLYW8BUjJBTzARXwD4S0FvAKIxkyFPMABwH0ALsXMwoJtBbwCiMYMhbwBCQW8A4jtBbwCyMythbwFSMkFPMBtBbwCyOEFxoV8A4W8BMGIBbwFBT2MC42NQAyFPYwLjYACLQW8AojGTIU8wAH",
+  "byteCount": 633,
+  "outputPath": "/tmp/gs2-current-historical.gs2bc",
+  "npcProperties": [
+    {
+      "packetType": "AddWeaponNPC",
+      "scriptType": "weapon",
+      "scriptName": "-tmpweapon",
+      "rawBase64": "IDBiY2FsYXJtY2xvY2sucG5naiAg",
+      "rawHex": "20 30 62 63 61 6c 61 72 6d 63 6c 6f 63 6b 2e 70 6e 67 6a 20 20",
+      "imagePropertyId": 0,
+      "image": "bcalarmclock.png",
+      "classPropertyId": 74,
+      "joinedClassNames": "",
+      "joinedClasses": []
+    }
+  ],
+  "temporaryScriptRemoved": true,
+  "success": true
+}

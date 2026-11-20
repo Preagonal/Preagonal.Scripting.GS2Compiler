@@ -1,0 +1,8 @@
+//#CLIENTSIDE
+function onServerListerConnect() { return 1; }
+function universe.onCreated() { return 2; }
+function onCreated() { return 3; }
+function universe.onPlayerChats() { return 4; }
+function onPlayerChats() { return 5; }
+function onServerLogin() { return 6; }
+function onConnectingToServer() { return 7; }

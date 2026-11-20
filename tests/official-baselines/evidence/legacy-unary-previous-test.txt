@@ -1,0 +1,17 @@
+	[Fact]
+	public void Given_unary_multiply_expression_When_compiling_Then_negation_follows_multiply()
+	{
+		const string scriptText =
+			"""
+						function onCreated() {
+						  temp.da = 1;
+						  temp.dy = -sin(temp.da) * 4;
+						}
+			""";
+
+		var result = Interface.CompileCode(scriptText, withHeader: false);
+		var code = ReadBytecodeSegment(result.ByteCode);
+
+		Assert.True(result.Success);
+		Assert.True(Contains([33, 20, 243, 4, 62, 69], code));
+	}

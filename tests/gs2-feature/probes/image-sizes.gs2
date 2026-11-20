@@ -1,0 +1,9 @@
+//#CLIENTSIDE
+function sizes() {
+ echo(imgwidth(gx_newmap.png));
+ echo(imgheight(gx_newmap.png));
+ echo(imgwidth("gx_newmap.png"));
+ echo(imgheight(temp.image));
+ echo(getimgwidth(temp.image));
+ echo(imgwidth(foo + bar));
+}

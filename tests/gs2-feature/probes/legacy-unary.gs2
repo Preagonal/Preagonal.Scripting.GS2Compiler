@@ -1,0 +1,5 @@
+//#CLIENTSIDE
+			function onCreated() {
+			  temp.da = 1;
+			  temp.dy = -sin(temp.da) * 4;
+			}

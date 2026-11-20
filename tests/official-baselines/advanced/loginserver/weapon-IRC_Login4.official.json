@@ -1,0 +1,23 @@
+{
+  "type": "weapon",
+  "name": "-tmpweapon",
+  "byteCodeBase64": "AAAAAQAAAAQAAAAAAAAAAgAAACAAAAAHb25TZXJ2ZXJMb2dpbgAAAAABb25DcmVhdGVkAAAAAAMAAAAuYXNkAEhFTExPIEZST00gSVJDNABlY2hvAGxvYWRpbmdzY3JlZW5lbmFibGVkAAAAAAQAAAArAfMZFzMKFPMABwHzGRcW8AAzCgkXFfABFvAAInEW8AIGIBbwAxkyFPMABw==",
+  "byteCount": 157,
+  "outputPath": "/tmp/gs2-current-historical.gs2bc",
+  "npcProperties": [
+    {
+      "packetType": "AddWeaponNPC",
+      "scriptType": "weapon",
+      "scriptName": "-tmpweapon",
+      "rawBase64": "IDBiY2FsYXJtY2xvY2sucG5naiAg",
+      "rawHex": "20 30 62 63 61 6c 61 72 6d 63 6c 6f 63 6b 2e 70 6e 67 6a 20 20",
+      "imagePropertyId": 0,
+      "image": "bcalarmclock.png",
+      "classPropertyId": 74,
+      "joinedClassNames": "",
+      "joinedClasses": []
+    }
+  ],
+  "temporaryScriptRemoved": true,
+  "success": true
+}

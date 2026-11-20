@@ -1,0 +1,24 @@
+{
+  "beforeResults": "gs2-level-cache.trx",
+  "afterResults": "gs2-literal-casts.trx",
+  "beforePassed": 685,
+  "afterPassed": 688,
+  "before": 7,
+  "after": 5,
+  "newFailures": [],
+  "resolved": [
+    "85dc8803-326b-204f-1482-365aa3d3ccc4",
+    "5664ce38-56fa-1d2b-9afc-9f81e7c00d1c"
+  ],
+  "changedFailures": [],
+  "matches": [
+    {
+      "relative": "advanced/graalx/weapon-Profile.gs2",
+      "bytes": 3153
+    },
+    {
+      "relative": "advanced/graalx/weaponRC_RightsWindow.gs2",
+      "bytes": 3331
+    }
+  ]
+}

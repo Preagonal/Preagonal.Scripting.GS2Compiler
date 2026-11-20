@@ -1,0 +1,9 @@
+//#CLIENTSIDE
+this.before = 1;
+function onCreated(temp.arg) { this.created = temp.arg; }
+if (playerenters) this.after = 2;
+function helper(temp.value) { return temp.value; }
+this.last = helper(3);
+function first() { return 4; }
+function second() { return 5; }
+if (playerhurt) this.hurt = first() + second();

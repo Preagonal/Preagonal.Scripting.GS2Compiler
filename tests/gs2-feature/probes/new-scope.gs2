@@ -1,0 +1,13 @@
+//#CLIENTSIDE
+function owners() {
+ for(temp.i=0;temp.i<2;temp.i++) {
+  this.(@temp.i)=this.x;
+  thiso.catchevent(this,"e","h");
+ }
+ new TTest(this.x) {
+  thiso.catchevent(this,"e","h");
+  this.x=1;
+  new TTest("child") { thiso.catchevent(this,"e","h"); }
+ }
+ thiso.catchevent(this,"e","h");
+}

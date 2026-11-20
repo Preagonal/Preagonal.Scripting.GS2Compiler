@@ -1,0 +1,36 @@
+{
+  "beforeResults": "gs2-particle-final.trx",
+  "afterResults": "gs2-unary-products-verified.trx",
+  "beforePassed": 627,
+  "afterPassed": 632,
+  "before": 53,
+  "after": 50,
+  "newFailures": [],
+  "resolved": [
+    "fe8852fa-480b-7070-fe89-cfc448456ddd",
+    "a952b7b5-2ce8-dbbc-c37d-f5ff0487d244",
+    "369660f9-9a8c-4dad-4291-4dd1bf18918d"
+  ],
+  "changedFailures": [],
+  "matches": [
+    {
+      "relative": "advanced/g2k1/weaponRoller.gs2",
+      "bytes": 362
+    },
+    {
+      "relative": "advanced/g2k1/weaponSpin.gs2",
+      "bytes": 646
+    },
+    {
+      "relative": "advanced/g2k1/weaponTrading Item.gs2",
+      "bytes": 3205
+    }
+  ],
+  "replacedInterfaceTest": {
+    "old": "Given_unary_multiply_expression_When_compiling_Then_negation_follows_multiply",
+    "new": "Given_unary_multiply_expression_When_compiling_Then_negation_precedes_multiply",
+    "officialProbe": "legacy-unary",
+    "bytes": 94,
+    "preserved": "legacy-unary-previous-test.txt"
+  }
+}

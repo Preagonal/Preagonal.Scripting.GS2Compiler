@@ -1,0 +1,4 @@
+//#CLIENTSIDE
+			function universe.onServerListerConnect() {
+			  return;
+			}

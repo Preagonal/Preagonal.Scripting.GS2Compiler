@@ -1,0 +1,11 @@
+//#CLIENTSIDE
+function scopes() {
+  for (temp.i=0;temp.i<2;temp.i++) {
+    with (objects[temp.i]) {
+      this.count++;
+      if (player.guild != this.groups[clientr.id][0]) this.count++;
+      with (children[0]) {this.count++;echo(this.count);}
+    }
+  }
+  this.count=0;
+}

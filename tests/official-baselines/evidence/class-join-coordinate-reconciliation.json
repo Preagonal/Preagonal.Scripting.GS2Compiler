@@ -1,0 +1,34 @@
+{
+  "beforeResults": "gs2-movement-class-attachment.trx",
+  "afterResults": "gs2-class-join-coordinates.trx",
+  "beforePassed": 641,
+  "afterPassed": 648,
+  "before": 42,
+  "after": 38,
+  "newFailures": [],
+  "resolved": [
+    "5a6a452f-5b88-47bb-2e45-80fd7d8290d5",
+    "4b8567ee-f5aa-df55-5774-02e87827cd7d",
+    "34e9bd9c-3926-7edc-045b-df84c2820f33",
+    "5e4791be-ddee-5682-e50b-6adc86df7942"
+  ],
+  "changedFailures": [],
+  "matches": [
+    {
+      "relative": "advanced/graalx/weapon-NewWeather.gs2",
+      "bytes": 260
+    },
+    {
+      "relative": "advanced/graalx/weapon-NewMovement.gs2",
+      "bytes": 2833
+    },
+    {
+      "relative": "advanced/graalx/weapon-Shake.gs2",
+      "bytes": 339
+    },
+    {
+      "relative": "advanced/graalx/weapon-Gravity.gs2",
+      "bytes": 881
+    }
+  ]
+}

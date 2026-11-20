@@ -1,0 +1,5 @@
+//#CLIENTSIDE
+if (playertouchsme) { this.value = 1; }
+if (playertouchsother) { this.value = 2; }
+if (playerhurt) { this.value = 3; }
+if (wasshot) { this.value = 4; }

@@ -1,0 +1,2 @@
+//#CLIENTSIDE
+function indices() { temp.result = temp.items.indices(2); return temp.result; }

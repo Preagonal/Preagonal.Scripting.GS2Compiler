@@ -1,0 +1,10 @@
+//#CLIENTSIDE
+function casts(temp.key) {
+ temp.a=@"literal";
+ temp.b=@"prefix" @ temp.key;
+ (@"RemoteControl_Rights_" @ temp.key).checked=true;
+ temp.c=@("a" @ temp.key);
+ temp.d=@temp.key;
+ temp.e=@{1,2};
+ temp.f=@_("text");
+}

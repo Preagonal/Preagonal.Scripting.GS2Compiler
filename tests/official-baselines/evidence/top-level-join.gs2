@@ -1,0 +1,9 @@
+//#CLIENTSIDE
+join("parity-missing-class");
+echo("before");
+join("parity-missing-class2");
+function onCreated() {
+  join("parity-missing-class");
+  echo("created");
+}
+if (playerenters) join("parity-missing-class");

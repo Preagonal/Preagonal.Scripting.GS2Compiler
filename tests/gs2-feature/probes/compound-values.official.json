@@ -1,0 +1,9 @@
+{
+  "type": "weapon",
+  "name": "-tmpweapon",
+  "byteCodeBase64": "AAAAAQAAAAQAAAAAAAAAAgAAAAsAAAABdmFsdWVzAAAAAAMAAAAVYQBiAGMAbgBkAGFycgBlAGVjaG8AAAAABAAAAK0B82kXvRbwACMzCgm9FvAAIx4hFPMBPDK9FvABI70W8AAjHh4hFPMCPDIyvRbwAiMV8AMpHh4hFPMDPDIyvRbwBCMW8AUkFPMAFvAFJBTzAIMhFPMEPIQW8AUkFPMAgzK9FvAGIxbwBSQU8wAU8wEW8AUkFPMAFPMBhSEU8wQ8hhbwBSQU8wAU8wGFMhe9FvAAIx4eIRTzBTwyFvAHBiC9FvAAIx4eIRTzBjwyBw==",
+  "byteCount": 241,
+  "outputPath": "/tmp/compound-values.gs2bc",
+  "temporaryScriptRemoved": true,
+  "success": true
+}

@@ -1,0 +1,7 @@
+//#CLIENTSIDE
+function labeled() {
+  outer: while (true) {
+    while (true) { break outer; }
+  }
+  return 7;
+}

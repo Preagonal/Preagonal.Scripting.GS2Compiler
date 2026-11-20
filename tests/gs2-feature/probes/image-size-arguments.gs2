@@ -1,0 +1,10 @@
+//#CLIENTSIDE
+function arguments() {
+ echo(imgwidth(foo,bar));
+ echo(imgheight( foo  +  bar  ));
+ echo(imgwidth());
+}
+function repeated() {
+ for(temp.i=0;temp.i<2;temp.i++) echo(imgwidth(foo.png));
+ echo(imgwidth(foo.png),imgwidth(foo.png),imgwidth(foo.png),imgwidth(foo.png),imgwidth(foo.png));
+}

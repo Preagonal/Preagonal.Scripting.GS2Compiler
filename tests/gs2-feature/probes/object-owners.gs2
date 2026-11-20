@@ -1,0 +1,16 @@
+//#CLIENTSIDE
+function values() {
+ echo(thiso,playero);
+ echo(thiso.name,playero.name);
+ thiso.foo=1; playero.foo=2;
+ thiso.echo(1); playero.echo(2);
+ with(temp.o) {
+  echo(thiso,playero);
+  echo(thiso.name,playero.name);
+  with(temp.p) echo(thiso.name);
+ }
+ new TTest("test") {
+  echo(thiso,playero);
+  echo(thiso.name,playero.name);
+ }
+}

@@ -1,0 +1,16 @@
+	[Fact]
+	public void Given_universe_object_function_When_compiling_Then_function_table_matches_reference_name()
+	{
+		const string scriptText =
+			"""
+						function universe.onServerListerConnect() {
+						  return;
+						}
+			""";
+
+		var result = Interface.CompileCode(scriptText, withHeader: false);
+		var functionNames = ReadFunctionNames(result.ByteCode);
+
+		Assert.True(result.Success);
+		Assert.Contains("onServerListerConnect,universe.onServerListerConnect", functionNames);
+	}

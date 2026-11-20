@@ -1,0 +1,4 @@
+//#CLIENTSIDE
+function onCreated() {
+  temp.obj = makevar("this.value");
+}

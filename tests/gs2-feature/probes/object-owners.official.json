@@ -1,0 +1,9 @@
+{
+  "type": "weapon",
+  "name": "-tmpweapon",
+  "byteCodeBase64": "AAAAAQAAAAQAAAAAAAAAAgAAAAsAAAABdmFsdWVzAAAAAAMAAAA2cGxheWVybwB0aGlzbwBlY2hvAG5hbWUAZm9vAG8AcAB0ZXN0AFRUZXN0AGFkZGNvbnRyb2wAAAAABAAAAL8B83MXMwoJFxbwABbwARbwAgYgF7cW8AMjtRbwAyMW8AIGILUW8AQjFPMBMrcW8AQjFPMCMhcU8wG1FvACIwYgFxTzArcW8AIjBiC9FvAFIySW81AXFvAAFvABFvACBiAXtxbwAyO1FvADIxbwAgYgvRbwBiMklvNPF7UW8AMjFvACBiCXlxXwBygeHh4V8AgiKjIklvNsFxbwABbwARbwAgYgF7cW8AMjtRbwAyMW8AIGIJcXHxbwCQYgFPMABw==",
+  "byteCount": 292,
+  "outputPath": "/tmp/object-owners.gs2bc",
+  "temporaryScriptRemoved": true,
+  "success": true
+}

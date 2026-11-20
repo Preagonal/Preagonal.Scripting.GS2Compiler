@@ -1,0 +1,11 @@
+{
+  "beforeResults": "gs2-goto-local-verified.trx",
+  "afterResults": "gs2-negated-chains-checkpoint.trx",
+  "beforePassed": 613,
+  "afterPassed": 616,
+  "before": 64,
+  "after": 62,
+  "newFailures": [],
+  "resolved": ["6bec85fc-32d9-3700-b9bb-9fb031cc83e1", "8a4b7ab6-4c72-2371-a995-a2e98ce8c244"],
+  "changedFailures": []
+}

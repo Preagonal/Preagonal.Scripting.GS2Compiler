@@ -1,0 +1,9 @@
+//#CLIENTSIDE
+function labeled() {
+  outer: for (temp.i=0;temp.i<3;temp.i++) {
+    for (temp.j=0;temp.j<3;temp.j++) {
+      if(temp.j==1) continue outer;
+      if(temp.i==2) break outer;
+    }
+  }
+}

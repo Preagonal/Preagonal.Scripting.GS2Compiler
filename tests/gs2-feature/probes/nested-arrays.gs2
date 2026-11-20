@@ -1,0 +1,10 @@
+//#CLIENTSIDE
+function nested(temp.arr) {
+  temp.arr[0][1] = 7;
+  temp.arr[0][1] += 2;
+  temp.value = temp.arr[0][1];
+  temp.arr[0][1]++;
+  temp.arr[0][1][2] = 9;
+  temp.arr[0,1][2] = 8;
+  temp.arr[0][1,2] = 6;
+}

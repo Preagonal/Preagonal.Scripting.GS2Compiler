@@ -9,7 +9,9 @@
   ],
   "packageRules": [
     {
-      "matchDatasources": ["nuget"],
+      "matchDatasources": [
+        "nuget"
+      ],
       "registryUrls": [
         "https://api.nuget.org/v3/index.json",
         "https://packages.preagonal.net/nuget/"

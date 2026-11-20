@@ -1,0 +1,8 @@
+//#CLIENTSIDE
+const MAX_COUNT = 64;
+enum Color { RED, GREEN = 5, BLUE };
+enum Suit { HEARTS, DIAMONDS, CLUBS, SPADES }
+function onCreated() {
+  temp.values = {MAX_COUNT, Color.RED, Color.GREEN, Color.BLUE, Suit.SPADES};
+  return temp.values;
+}

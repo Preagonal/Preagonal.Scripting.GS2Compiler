@@ -1,0 +1,11 @@
+{
+  "beforeResults": "gs2-affected-reconciled.trx",
+  "afterResults": "gs2-lambda-unicode-checkpoint.trx",
+  "beforePassed": 592,
+  "afterPassed": 597,
+  "before": 71,
+  "after": 70,
+  "newFailures": [],
+  "resolved": ["d08e60e6-00da-0caf-43e4-b846fe8c4e86"],
+  "changedFailures": []
+}
