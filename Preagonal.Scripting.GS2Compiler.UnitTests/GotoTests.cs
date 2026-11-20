@@ -3,7 +3,7 @@ using System.Text;
 
 namespace Preagonal.Scripting.GS2Compiler.UnitTests;
 
-public class GotoTests
+public class GotoTests : TestBase
 {
 	[Theory]
 	[InlineData("testForwardGoto", false)]
@@ -11,7 +11,7 @@ public class GotoTests
 	[InlineData("testGotoIntoNestedBlock", false)]
 	public void Given_local_goto_fixture_When_compiling_Then_jump_lands_on_the_labeled_statement(string functionName, bool backward)
 	{
-		var source = File.ReadAllText(Path.Combine(BaselineTests.FindRepoRoot(), "tests", "scripts", "statements", "05_goto.gs2"));
+		var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "tests", "scripts", "statements", "05_goto.gs2"));
 		var result = Interface.CompileCode(source, withHeader: false, grammar: ScriptGrammar.GS2);
 		Assert.True(result.Success, result.ErrMsg);
 		var segments  = Gs2FeatureParityTests.ReadSegments(result.ByteCode);
@@ -120,7 +120,7 @@ public class GotoTests
 			if (opcode is 1 or 2 or 3 or 4 or 5 or 20 or 21 or 22 or 45 or 46 or 150 or 163)
 			{
 				var kind = bytes[offset++];
-				Assert.InRange((int)kind, 0xF0, 0xF5);
+				Assert.InRange(kind, 0xF0, 0xF5);
 				var size = 1 << ((kind - 0xF0) % 3);
 				operand = size switch
 				{

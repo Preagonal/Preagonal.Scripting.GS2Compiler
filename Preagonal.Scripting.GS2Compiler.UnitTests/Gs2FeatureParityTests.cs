@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 
 namespace Preagonal.Scripting.GS2Compiler.UnitTests;
 
-public class Gs2FeatureParityTests
+public class Gs2FeatureParityTests : TestBase
 {
 	[Theory]
 	[InlineData("enums", "BLUE }", "BLUE }")]
@@ -61,10 +61,9 @@ public class Gs2FeatureParityTests
 	[InlineData("literal-casts", "casts", "casts")]
 	public void Given_gs2_feature_with_optional_syntax_extension_When_compiling_Then_bytecode_matches_official(string name, string original, string replacement)
 	{
-		var directory                                                                                                                = new DirectoryInfo(AppContext.BaseDirectory);
-		while (directory != null && !File.Exists(Path.Combine(directory.FullName, "Preagonal.Scripting.GS2Compiler.sln"))) directory = directory.Parent;
+		var directory = FindRepoRoot();
 		Assert.NotNull(directory);
-		var path   = Path.Combine(directory.FullName, "tests", "gs2-feature", "probes", name);
+		var path   = Path.Combine(directory, "tests", "gs2-feature", "probes", name);
 		var source = File.ReadAllText(path + ".gs2");
 		Assert.Contains(original, source);
 		using var official = JsonDocument.Parse(File.ReadAllText(path + ".official.json"));
@@ -81,7 +80,7 @@ public class Gs2FeatureParityTests
 	[Fact]
 	public void Given_lambda_and_dynamic_member_probe_When_compiling_Then_all_segments_match_official()
 	{
-		var       path     = Path.Combine(BaselineTests.FindRepoRoot(), "tests", "gs2-feature", "probes", "particle-lambda-dynamic");
+		var       path     = Path.Combine(FindRepoRoot(), "tests", "gs2-feature", "probes", "particle-lambda-dynamic");
 		var       result   = Interface.CompileCode(File.ReadAllText(path + ".gs2"), type: "weapon", name: "-tmpweapon", withHeader: false, grammar: ScriptGrammar.GS2);
 		using var official = JsonDocument.Parse(File.ReadAllText(path + ".official.json"));
 
@@ -105,7 +104,7 @@ public class Gs2FeatureParityTests
 	[Fact]
 	public void Given_full_feature_script_When_compiling_Then_all_segments_match_repeated_official_results()
 	{
-		var root   = BaselineTests.FindRepoRoot();
+		var root   = FindRepoRoot();
 		var path   = Path.Combine(root, "tests", "gs2-feature");
 		var result = Interface.CompileCode(File.ReadAllText(Path.Combine(path, "feature-test.gs2")), withHeader: false, grammar: ScriptGrammar.GS2);
 		Assert.True(result.Success, result.ErrMsg);
@@ -120,7 +119,7 @@ public class Gs2FeatureParityTests
 	[Fact]
 	public void Given_inline_callback_fixture_When_compiling_Then_all_lambdas_remain_supported()
 	{
-		var root             = BaselineTests.FindRepoRoot();
+		var root             = FindRepoRoot();
 		var source           = File.ReadAllText(Path.Combine(root, "tests", "scripts", "functions", "03_lambdas.gs2"));
 		var compatibleSource = File.ReadAllText(Path.Combine(root, "tests", "official-baselines", "functions", "03_lambdas.official.gs2"));
 		var expectedSource = "//#CLIENTSIDE\n" +
@@ -145,13 +144,13 @@ public class Gs2FeatureParityTests
 	[Fact]
 	public void Given_unicode_string_fixture_When_compiling_Then_unicode_is_preserved()
 	{
-		var          path           = Path.Combine(BaselineTests.FindRepoRoot(), "tests", "scripts", "edge_cases", "02_long_strings.gs2");
+		var          path           = Path.Combine(FindRepoRoot(), "tests", "scripts", "edge_cases", "02_long_strings.gs2");
 		var          source         = File.ReadAllText(path);
 		const string unicode        = "Unicode: \u03b1\u03b2\u03b3\u03b4\u03b5 \u0391\u0392\u0393\u0394\u0395 \u4e2d\u6587 \u65e5\u672c\u8a9e \ud55c\uad6d\uc5b4";
-		var          compatiblePath = Path.Combine(BaselineTests.FindRepoRoot(), "tests", "official-baselines", "edge_cases", "02_long_strings.official.gs2");
+		var          compatiblePath = Path.Combine(FindRepoRoot(), "tests", "official-baselines", "edge_cases", "02_long_strings.official.gs2");
 		var          compatible     = File.ReadAllText(compatiblePath);
 		Assert.Equal(("//#CLIENTSIDE\n" + source.Replace(unicode, "Unicode: ????? ????? ?? ??? ???")).TrimEnd(), compatible.TrimEnd());
-		Assert.All(compatible, character => Assert.InRange((int)character, 0, 127));
+		Assert.All(compatible, character => Assert.InRange(character, 0, 127));
 		var result = Interface.CompileCode(source, withHeader: false, grammar: ScriptGrammar.GS2);
 
 		Assert.True(result.Success, result.ErrMsg);
@@ -162,7 +161,7 @@ public class Gs2FeatureParityTests
 	[Fact]
 	public void Given_movement_class_join_When_comparing_bytecode_Then_only_the_attachment_is_separated()
 	{
-		var          root       = BaselineTests.FindRepoRoot();
+		var          root       = FindRepoRoot();
 		var          relative   = Path.Combine("advanced", "graalx", "weapon-Movement");
 		var          source     = File.ReadAllText(Path.Combine(root, "tests", "scripts", relative + ".gs2"));
 		var          compatible = File.ReadAllText(Path.Combine(root, "tests", "official-baselines", relative + ".official.gs2"));
@@ -207,7 +206,7 @@ public class Gs2FeatureParityTests
 	[InlineData("weapon")]
 	public void Given_server_class_attachment_When_compiling_clientside_Then_class_and_weapon_bytecode_stay_separate(string type)
 	{
-		var       evidence = Path.Combine(BaselineTests.FindRepoRoot(), "tests", "official-baselines", "evidence");
+		var       evidence = Path.Combine(FindRepoRoot(), "tests", "official-baselines", "evidence");
 		using var capture  = JsonDocument.Parse(File.ReadAllText(Path.Combine(evidence, "class-join-success.json")));
 		var       request  = capture.RootElement.GetProperty("request");
 		var       response = capture.RootElement.GetProperty("response");
@@ -296,10 +295,9 @@ public class Gs2FeatureParityTests
 	[Fact]
 	public void Given_corrected_full_feature_script_When_restoring_enum_trailing_comma_Then_local_bytecode_is_unchanged()
 	{
-		var directory                                                                                                                = new DirectoryInfo(AppContext.BaseDirectory);
-		while (directory != null && !File.Exists(Path.Combine(directory.FullName, "Preagonal.Scripting.GS2Compiler.sln"))) directory = directory.Parent;
+		var directory = FindRepoRoot();
 		Assert.NotNull(directory);
-		var source = File.ReadAllText(Path.Combine(directory.FullName, "tests", "gs2-feature", "feature-test.gs2"));
+		var source = File.ReadAllText(Path.Combine(directory, "tests", "gs2-feature", "feature-test.gs2"));
 		Assert.Contains("  BLUE\n", source);
 		var officialSyntax = Interface.CompileCode(source, withHeader: false, grammar: ScriptGrammar.GS2);
 		var trailingComma  = Interface.CompileCode(source.Replace("  BLUE\n", "  BLUE,\n"), withHeader: false, grammar: ScriptGrammar.GS2);

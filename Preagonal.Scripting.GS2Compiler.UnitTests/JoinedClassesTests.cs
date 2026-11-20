@@ -1,6 +1,6 @@
 namespace Preagonal.Scripting.GS2Compiler.UnitTests;
 
-public class JoinedClassesTests
+public class JoinedClassesTests : TestBase
 {
 	[Theory]
 	[InlineData(false)]

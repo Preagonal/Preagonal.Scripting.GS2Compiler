@@ -2,7 +2,7 @@ using System.Text;
 
 namespace Preagonal.Scripting.GS2Compiler.UnitTests;
 
-public class InterfaceTests
+public class InterfaceTests : TestBase
 {
 	[Theory]
 	[InlineData("a,b", "|-1,1|")]
@@ -436,7 +436,7 @@ public class InterfaceTests
 		                          """;
 
 		var       result   = Interface.CompileCode(scriptText, withHeader: false);
-		var       path     = Path.Combine(BaselineTests.FindRepoRoot(), "tests", "gs2-feature", "probes", "legacy-string-cast.official.json");
+		var       path     = Path.Combine(FindRepoRoot(), "tests", "gs2-feature", "probes", "legacy-string-cast.official.json");
 		using var official = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
 		var       expected = official.RootElement.GetProperty("byteCodeBase64").GetBytesFromBase64();
 

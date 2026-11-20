@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 
 namespace Preagonal.Scripting.GS2Compiler.UnitTests;
 
-public class BaselineTests
+public class BaselineTests : TestBase
 {
 	public static IEnumerable<object[]> BasicScripts()
 	{
@@ -1319,14 +1319,6 @@ public class BaselineTests
 
 		Assert.False(result.Success);
 		Assert.Empty(result.ByteCode);
-	}
-
-	public static string FindRepoRoot()
-	{
-		var dir = AppContext.BaseDirectory;
-		while (dir != null && !File.Exists(Path.Combine(dir, "Preagonal.Scripting.GS2Compiler.sln")))
-			dir = Directory.GetParent(dir)?.FullName;
-		return dir ?? throw new DirectoryNotFoundException("Could not find repository root.");
 	}
 
 	private sealed class BaselineData

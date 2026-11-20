@@ -2,11 +2,11 @@ using Antlr4.Runtime;
 
 namespace Preagonal.Scripting.GS2Compiler.UnitTests;
 
-public class AntlrGrammarTests
+public class AntlrGrammarTests : TestBase
 {
 	public static IEnumerable<object[]> ParserFixtures()
 	{
-		var root = BaselineTests.FindRepoRoot();
+		var root = FindRepoRoot();
 		yield return [Path.Combine(root, "tests", "scripts", "statements", "03_switch.gs2")];
 		foreach (var fixture in BaselineTests.AdvancedParityScripts()) yield return fixture;
 	}

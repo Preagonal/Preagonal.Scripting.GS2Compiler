@@ -68,7 +68,7 @@ internal static class GS2Compiler
 		var hash = 0x1505u;
 		foreach (var value in Encoding.UTF8.GetBytes(name))
 		{
-			var character = value is >= (byte)'A' and <= (byte)'Z' ? value + 32 : (int)(sbyte)value;
+			var character = value is >= (byte)'A' and <= (byte)'Z' ? value + 32 : (sbyte)value;
 			hash = unchecked(hash * 17 ^ (uint)character);
 		}
 
@@ -954,7 +954,7 @@ internal static class GS2Compiler
 			private Expr BuildIn(GS1Parser.InExpressionContext context)
 			{
 				if (context is not GS1Parser.ExpressionInContext inExpression) throw Failure(context);
-				var  subjects = inExpression.additiveExpression().Select(BuildAdditive).ToList();
+				var subjects = inExpression.additiveExpression().Select(BuildAdditive).ToList();
 				var left     = subjects.Count == 1 ? subjects[0] : new ArrayLiteralExpr(subjects);
 				if (inExpression.OP_IN() == null) return left;
 				if (inExpression.range_literal() is { } rangeLiteral)
@@ -3622,7 +3622,7 @@ internal static class GS2Compiler
 			{
 				0xF0 or 0xF3 => ((sbyte)_code[offset + 1], 2),
 				0xF1 or 0xF4 => ((short)((_code[offset + 1] << 8) | _code[offset + 2]), 3),
-				0xF2 or 0xF5 => (((int)_code[offset + 1] << 24) | (_code[offset + 2] << 16) | (_code[offset + 3] << 8) | _code[offset + 4], 5),
+				0xF2 or 0xF5 => ((_code[offset + 1] << 24) | (_code[offset + 2] << 16) | (_code[offset + 3] << 8) | _code[offset + 4], 5),
 				0xF6         => (null, DynamicStringLength(offset)),
 				_            => (null, 0),
 			};
@@ -3736,7 +3736,7 @@ internal static class GS2Compiler
 	{
 		public static byte[] Wrap(byte[] bytecode, string type, string name)
 		{
-			var        info   = Encoding.UTF8.GetBytes($"{type},{name},0,");
+			var info = Encoding.UTF8.GetBytes($"{type},{name},0,");
 			List<byte> result =
 			[
 				0xAC, (byte)((info.Length >> 8) & 0xFF), (byte)(info.Length & 0xFF),

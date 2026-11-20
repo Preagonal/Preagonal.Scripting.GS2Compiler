@@ -21,21 +21,22 @@ namespace gs2compiler_native
 {
 #endif
 
-typedef struct CompilerResponse {
-    bool Success;
-    const char *ErrMsg;
-    unsigned char *ByteCode;
-    uint32_t ByteCodeSize;
-    const char *const *JoinedClasses;
-    uint32_t JoinedClassesCount;
-} CompilerResponse;
+    typedef struct CompilerResponse
+    {
+        bool Success;
+        const char* ErrMsg;
+        unsigned char* ByteCode;
+        uint32_t ByteCodeSize;
+        const char* const * JoinedClasses;
+        uint32_t JoinedClassesCount;
+    } CompilerResponse;
 
-DLL_EXPORT CompilerResponse compile_code_no_header(const char *code);
+    DLL_EXPORT CompilerResponse compile_code_no_header(const char* code);
 
-DLL_EXPORT CompilerResponse compile_code(const char *code, const char *type, const char *name);
+    DLL_EXPORT CompilerResponse compile_code(const char* code, const char* type, const char* name);
 
-// Releases all response allocations and clears the response. Strings are UTF-8.
-DLL_EXPORT void free_response(CompilerResponse *response);
+    // Releases all response allocations and clears the response. Strings are UTF-8.
+    DLL_EXPORT void free_response(CompilerResponse* response);
 
 #ifdef __cplusplus
 }

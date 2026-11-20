@@ -51,7 +51,7 @@ public static unsafe class NativeExports
 	private static IntPtr Copy(string[] strings)
 	{
 		if (strings.Length == 0) return IntPtr.Zero;
-		var ptr = Marshal.AllocCoTaskMem(strings.Length * IntPtr.Size);
+		var ptr                                                    = Marshal.AllocCoTaskMem(strings.Length * IntPtr.Size);
 		for (var i = 0; i < strings.Length; i++) ((IntPtr*)ptr)[i] = Marshal.StringToCoTaskMemUTF8(strings[i]);
 		return ptr;
 	}
